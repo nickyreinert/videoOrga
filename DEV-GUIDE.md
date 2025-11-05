@@ -61,11 +61,32 @@ Automated video tagging system that extracts frames from videos, analyzes them u
 - [ ] Resume capability for interrupted jobs
 
 ### Phase 6: Optimization & Features
+- [x] SQLite database with thumbnails
+- [x] File metadata extraction
+- [x] Smart datetime parsing from filenames
+- [ ] Audio transcription (Whisper) ⭐ NEW
+- [ ] Text summarization with local LLM ⭐ NEW
 - [ ] Multi-threading for video processing
 - [ ] GPU batch optimization
 - [ ] Cache processed videos (checksums)
 - [ ] Export formats (CSV, JSON, database)
-- [ ] Web UI (optional, future)
+- [ ] Flask Web UI for browsing (NEXT PHASE)
+
+### Phase 6.5: Audio Analysis (NEW)
+- [ ] Extract audio from video (FFmpeg)
+- [ ] Transcribe with Whisper (OpenAI, runs locally on GPU)
+- [ ] Summarize transcription with local LLM
+- [ ] Store transcript and summary in database
+- [ ] Add transcript-based tags
+- [ ] Search by spoken content
+
+### Phase 7: Flask Web Browser (Planned)
+- [ ] Flask application setup
+- [ ] Video grid view with thumbnails
+- [ ] Filter by tags, date, location
+- [ ] Video playback interface
+- [ ] Search functionality
+- [ ] Tag management (add/remove tags)
 
 ## File Structure
 ```
@@ -170,3 +191,45 @@ pip install salesforce-lavis  # For BLIP-2
 - Log all processing steps for debugging
 - Keep dependencies minimal and well-documented
 - Prefer configuration files over hardcoded values
+
+## Flask Web UI - Implementation Notes (Next Phase)
+
+### Required Features for Web Browser:
+1. **Home Page**: Grid view of all videos with thumbnails
+2. **Filter Panel**: Filter by tags (multi-select), date range, search text
+3. **Video Detail Page**: Show all 3 thumbnails, full metadata, play button
+4. **Tag Cloud**: Visual representation of all tags with counts
+5. **Statistics Dashboard**: Charts showing collection stats
+
+### Technical Stack for Flask App:
+- Flask (backend framework)
+- SQLite (already implemented)
+- Bootstrap 5 or Tailwind CSS (frontend styling)
+- htmx or vanilla JS (dynamic interactions)
+- Video.js or HTML5 video player (video playback)
+
+### Key API Endpoints Needed:
+```python
+GET  /                          # Home page with grid
+GET  /api/videos                # List videos (with filters)
+GET  /api/videos/<id>           # Single video details
+GET  /api/tags                  # All tags with counts
+GET  /api/search?q=...          # Search videos
+POST /api/videos/<id>/tags      # Add/remove tags
+GET  /api/stats                 # Statistics
+```
+
+### Database Queries Already Supported:
+- ✓ `db.search_videos(tags, start_date, end_date, search_text)`
+- ✓ `db.get_video_with_tags(video_id)` (includes thumbnails)
+- ✓ `db.get_all_tags()` (with counts)
+- ✓ `db.get_statistics()`
+
+### Next Steps for Flask Implementation:
+1. Create `app.py` with Flask application
+2. Create templates: `index.html`, `video_detail.html`, `search.html`
+3. Create static files: CSS, JS for interactions
+4. Implement video streaming endpoint
+5. Add thumbnail display (decode base64 to img src)
+6. Implement filtering and search
+7. Add tag management (add/remove tags manually)

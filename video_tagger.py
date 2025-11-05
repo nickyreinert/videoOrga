@@ -12,6 +12,7 @@ from typing import List, Dict
 # Import our modules
 from frame_extractor import FrameExtractor
 from ai_analyzer import AIAnalyzer
+from audio_analyzer import AudioAnalyzer
 from db_handler import DatabaseHandler, extract_file_metadata
 
 
@@ -21,7 +22,9 @@ class VideoTagger:
     def __init__(self, 
                  num_frames: int = 8,
                  model_name: str = "blip",
-                 db_path: str = None):
+                 db_path: str = None,
+                 enable_audio: bool = False,
+                 whisper_model: str = "base"):
         """
         Initialize video tagger with SQLite backend
         
@@ -29,9 +32,21 @@ class VideoTagger:
             num_frames: Number of frames to extract per video
             model_name: AI model to use ('blip2', 'blip', 'clip')
             db_path: Path to SQLite database (default: video_archive.db in current dir)
+            enable_audio: Whether to transcribe and summarize audio
+            whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
         """
         self.extractor = FrameExtractor(num_frames=num_frames)
         self.analyzer = AIAnalyzer(model_name=model_name)
+        
+        # Audio analysis (optional)
+        self.enable_audio = enable_audio
+        if enable_audio:
+            self.audio_analyzer = AudioAnalyzer(
+                whisper_model=whisper_model,
+                device="auto"
+            )
+        else:
+            self.audio_analyzer = None
         
         # Set database path - if not specified, use same directory as input or current dir
         if db_path is None:
@@ -39,6 +54,8 @@ class VideoTagger:
         self.db = DatabaseHandler(db_path)
         
         print(f"Using database: {self.db.db_path}")
+        if enable_audio:
+            print(f"Audio transcription: ENABLED (Whisper {whisper_model})")
     
     def process_video(self, video_path: str, force: bool = False) -> Dict:
         """
@@ -89,7 +106,7 @@ class VideoTagger:
             return None
         
         # Step 3: Extract thumbnail previews
-        print("\n[3/5] Extracting thumbnail previews...")
+        print("\n[3/6] Extracting thumbnail previews...")
         try:
             thumbnails = self.extractor.extract_thumbnails(video_path, num_thumbnails=3)
         except Exception as e:
@@ -97,15 +114,36 @@ class VideoTagger:
             thumbnails = []
         
         # Step 4: Analyze frames with AI
-        print("\n[4/5] Analyzing frames with AI...")
+        print("\n[4/6] Analyzing frames with AI...")
         try:
             analysis = self.analyzer.analyze_frames(frames)
         except Exception as e:
             print(f"Error analyzing frames: {e}")
             return None
         
-        # Step 5: Store everything in database
-        print("\n[5/5] Storing in database...")
+        # Step 5: Analyze audio (optional)
+        audio_result = {
+            'has_speech': False,
+            'transcript': '',
+            'summary': '',
+            'language': '',
+            'word_count': 0
+        }
+        
+        if self.enable_audio:
+            print("\n[5/6] Analyzing audio (transcription & summary)...")
+            try:
+                audio_result = self.audio_analyzer.analyze_video_audio(
+                    video_path,
+                    summarize=True
+                )
+            except Exception as e:
+                print(f"Warning: Audio analysis failed: {e}")
+        else:
+            print("\n[5/6] Skipping audio analysis (use --audio to enable)")
+        
+        # Step 6: Store everything in database
+        print("\n[6/6] Storing in database...")
         
         # Combine metadata
         video_data = {
@@ -118,7 +156,13 @@ class VideoTagger:
             'codec': video_meta.get('codec', 'unknown'),
             'processed_date': datetime.now().isoformat(),
             'frames_analyzed': analysis['frame_count'],
-            'description': analysis['descriptions'][0] if analysis['descriptions'] else None
+            'description': analysis['descriptions'][0] if analysis['descriptions'] else None,
+            # Audio data
+            'has_speech': audio_result['has_speech'],
+            'transcript': audio_result['transcript'],
+            'transcript_summary': audio_result['summary'],
+            'audio_language': audio_result['language'],
+            'word_count': audio_result['word_count']
         }
         
         # Insert video record
@@ -142,6 +186,8 @@ class VideoTagger:
         print(f"  Video ID: {video_id}")
         print(f"  Tags: {', '.join(result['tags'])}")
         print(f"  Thumbnails: {len(thumbnails)} stored")
+        if audio_result['has_speech']:
+            print(f"  Audio: {audio_result['word_count']} words transcribed ({audio_result['language']})")
         
         return result
     
@@ -200,6 +246,9 @@ class VideoTagger:
         print(f"  Unique tags: {stats['unique_tags']}")
         print(f"  Total size: {stats['total_size_gb']} GB")
         print(f"  Total duration: {stats['total_duration_hours']} hours")
+        if stats.get('videos_with_speech', 0) > 0:
+            print(f"  Videos with speech: {stats['videos_with_speech']}")
+            print(f"  Total words transcribed: {stats['total_words_transcribed']:,}")
     
     def search_by_tag(self, tag: str, limit: int = 50) -> List[Dict]:
         """
@@ -226,6 +275,10 @@ class VideoTagger:
         print(f"Total storage: {stats['total_size_gb']} GB")
         print(f"Total duration: {stats['total_duration_hours']} hours")
         
+        if stats.get('videos_with_speech', 0) > 0:
+            print(f"Videos with speech: {stats['videos_with_speech']}")
+            print(f"Total words: {stats['total_words_transcribed']:,}")
+        
         # Show top tags
         print(f"\nTop 20 Tags:")
         tags = self.db.get_all_tags()[:20]
@@ -235,6 +288,8 @@ class VideoTagger:
     def cleanup(self):
         """Clean up resources"""
         self.analyzer.cleanup()
+        if self.audio_analyzer:
+            self.audio_analyzer.cleanup()
         self.db.close()
 
 
@@ -247,6 +302,9 @@ def main():
 Examples:
   # Process single video
   python video_tagger.py video.mp4
+  
+  # Process with audio transcription
+  python video_tagger.py video.mp4 --audio
   
   # Process directory (creates video_archive.db in current dir)
   python video_tagger.py /path/to/videos --recursive
@@ -284,6 +342,17 @@ Examples:
         help='SQLite database path (default: video_archive.db in current directory)'
     )
     parser.add_argument(
+        '--audio',
+        action='store_true',
+        help='Enable audio transcription and summarization (requires Whisper)'
+    )
+    parser.add_argument(
+        '--whisper-model',
+        choices=['tiny', 'base', 'small', 'medium', 'large'],
+        default='base',
+        help='Whisper model size for transcription (default: base)'
+    )
+    parser.add_argument(
         '--recursive',
         action='store_true',
         help='Process subdirectories recursively'
@@ -319,7 +388,9 @@ Examples:
     tagger = VideoTagger(
         num_frames=args.frames,
         model_name=args.model,
-        db_path=db_path
+        db_path=db_path,
+        enable_audio=args.audio,
+        whisper_model=args.whisper_model
     )
     
     try:

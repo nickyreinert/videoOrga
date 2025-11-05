@@ -71,6 +71,13 @@ class DatabaseHandler:
                 processed_date TEXT NOT NULL,
                 frames_analyzed INTEGER,
                 
+                -- Audio/Speech Analysis (NEW)
+                has_speech INTEGER DEFAULT 0,
+                transcript TEXT,
+                transcript_summary TEXT,
+                audio_language TEXT,
+                word_count INTEGER,
+                
                 -- Metadata
                 description TEXT,
                 notes TEXT,
@@ -128,6 +135,19 @@ class DatabaseHandler:
         self.cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_videos_parsed_datetime ON videos(parsed_datetime)
         """)
+        self.cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_videos_has_speech ON videos(has_speech)
+        """)
+        
+        # Create full-text search for transcripts (optional but recommended)
+        try:
+            self.cursor.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS videos_fts USING fts5(
+                    video_id, transcript, transcript_summary, content=videos, content_rowid=id
+                )
+            """)
+        except:
+            pass  # FTS5 might not be available in all SQLite versions
         
         self.conn.commit()
     
@@ -177,8 +197,9 @@ class DatabaseHandler:
                 file_path, file_name, file_size_bytes, file_hash,
                 file_created_date, file_modified_date, parsed_datetime,
                 duration_seconds, fps, width, height, resolution, codec,
-                processed_date, frames_analyzed, description
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                processed_date, frames_analyzed, description,
+                has_speech, transcript, transcript_summary, audio_language, word_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get('file_path'),
             data.get('file_name'),
@@ -195,7 +216,12 @@ class DatabaseHandler:
             data.get('codec'),
             data.get('processed_date'),
             data.get('frames_analyzed'),
-            data.get('description')
+            data.get('description'),
+            data.get('has_speech', 0),
+            data.get('transcript'),
+            data.get('transcript_summary'),
+            data.get('audio_language'),
+            data.get('word_count', 0)
         ))
         
         self.conn.commit()
@@ -215,6 +241,11 @@ class DatabaseHandler:
                 processed_date = ?,
                 frames_analyzed = ?,
                 description = ?,
+                has_speech = ?,
+                transcript = ?,
+                transcript_summary = ?,
+                audio_language = ?,
+                word_count = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
@@ -228,6 +259,11 @@ class DatabaseHandler:
             data.get('processed_date'),
             data.get('frames_analyzed'),
             data.get('description'),
+            data.get('has_speech', 0),
+            data.get('transcript'),
+            data.get('transcript_summary'),
+            data.get('audio_language'),
+            data.get('word_count', 0),
             video_id
         ))
         self.conn.commit()
@@ -298,6 +334,7 @@ class DatabaseHandler:
                      start_date: str = None,
                      end_date: str = None,
                      search_text: str = None,
+                     has_speech: bool = None,
                      limit: int = 100) -> List[Dict]:
         """
         Search videos with various filters
@@ -306,7 +343,8 @@ class DatabaseHandler:
             tags: List of tags to filter by (OR logic)
             start_date: Start date (ISO format)
             end_date: End date (ISO format)
-            search_text: Search in filename and descriptions
+            search_text: Search in filename, descriptions, and transcripts
+            has_speech: Filter by speech presence (True/False/None)
             limit: Maximum results
             
         Returns:
@@ -331,8 +369,15 @@ class DatabaseHandler:
             params.append(end_date)
         
         if search_text:
-            conditions.append("(v.file_name LIKE ? OR v.description LIKE ?)")
-            params.extend([f"%{search_text}%", f"%{search_text}%"])
+            conditions.append(
+                "(v.file_name LIKE ? OR v.description LIKE ? OR v.transcript LIKE ? OR v.transcript_summary LIKE ?)"
+            )
+            search_pattern = f"%{search_text}%"
+            params.extend([search_pattern] * 4)
+        
+        if has_speech is not None:
+            conditions.append("v.has_speech = ?")
+            params.append(1 if has_speech else 0)
         
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -387,6 +432,9 @@ class DatabaseHandler:
         self.cursor.execute("SELECT COUNT(*) FROM videos")
         stats['total_videos'] = self.cursor.fetchone()[0]
         
+        self.cursor.execute("SELECT COUNT(*) FROM videos WHERE has_speech = 1")
+        stats['videos_with_speech'] = self.cursor.fetchone()[0]
+        
         self.cursor.execute("SELECT COUNT(DISTINCT tag) FROM tags")
         stats['unique_tags'] = self.cursor.fetchone()[0]
         
@@ -397,6 +445,10 @@ class DatabaseHandler:
         self.cursor.execute("SELECT SUM(duration_seconds) FROM videos")
         total_duration = self.cursor.fetchone()[0]
         stats['total_duration_hours'] = round(total_duration / 3600, 2) if total_duration else 0
+        
+        self.cursor.execute("SELECT SUM(word_count) FROM videos WHERE has_speech = 1")
+        total_words = self.cursor.fetchone()[0]
+        stats['total_words_transcribed'] = total_words if total_words else 0
         
         return stats
     

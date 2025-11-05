@@ -1,83 +1,278 @@
-# Video Auto-Tagger Development & Setup Guide
+# Video Auto-Tagger
 
-## Project Overview
+Automatically analyze and tag your video collection using local AI models running on your GPU. All metadata is stored in a SQLite database with thumbnail previews, ready for building a web browser interface.
 
-Automated video tagging system that extracts frames from videos, analyzes them using local AI (GPU-accelerated), and generates descriptive tags/metadata.
+## Features
 
-## System Requirements
+- 🎬 Extract representative frames from videos
+- 🤖 Analyze frames using local AI (BLIP, BLIP-2, or CLIP)
+- 🏷️ Automatically generate descriptive tags
+- 🎤 **Audio transcription with Whisper** (optional) ⭐ NEW
+- 📝 **AI text summarization** (optional) ⭐ NEW
+- 💾 Store metadata in SQLite database
+- 📸 Generate 3 thumbnail previews per video (base64 encoded)
+- 📅 Smart datetime parsing from filenames
+- 📊 Rich file metadata (size, dates, resolution, codec)
+- 🔍 Search videos by tags and transcripts
+- ⚡ GPU-accelerated (optimized for RTX 3070)
+- 📦 Batch processing for entire directories
+- 📈 Database statistics and analytics
 
-* Python 3.11.8 (via PyEnv)
-* NVIDIA GeForce RTX 3070 (CUDA-compatible)
-* FFmpeg for video processing
-* Local AI model for image analysis
+## Requirements
 
-## Technology Stack
+- Python 3.8 or higher
+- NVIDIA GPU with CUDA support (tested on RTX 3070)
+- 8GB+ GPU VRAM recommended
+- FFmpeg (for video processing)
 
-* **Video Processing**: OpenCV / FFmpeg
-* **AI Model**: BLIP-2, LLaVA, or similar vision-language model
-* **GPU Acceleration**: PyTorch with CUDA
-* **Storage**: JSON/SQLite for metadata
-* **Dependencies**: transformers, opencv-python, torch, pillow
+## Installation
 
-## 2. File Structure
+### 1. Create Virtual Environment
+
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or
+venv\Scripts\activate  # Windows
+```
+
+### 2. Install PyTorch with CUDA
+
+Visit [PyTorch website](https://pytorch.org/get-started/locally/) or use:
+
+```bash
+# For CUDA 11.8
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# For CUDA 12.1
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+```
+
+### 3. Install Other Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Verify GPU Support
+
+```bash
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+```
+
+## Quick Start
+
+### Process a Single Video
+
+```bash
+python video_tagger.py my_video.mp4
+```
+
+This creates a `video_archive.db` SQLite database in the same directory as your video.
+
+### Process All Videos in a Directory
+
+```bash
+python video_tagger.py /path/to/videos/ --recursive
+```
+
+This creates `video_archive.db` inside the `/path/to/videos/` directory.
+
+### Search Videos by Tag
+
+```bash
+python video_tagger.py . --search "outdoor"
+```
+
+### View Statistics
+
+```bash
+python video_tagger.py . --stats
+```
+
+## Usage
+
+```
+python video_tagger.py <input> [options]
+
+Arguments:
+  input                 Video file or directory to process (default: current dir)
+
+Options:
+  --frames N            Number of frames to extract (default: 8)
+  --model MODEL         AI model: blip, blip2, or clip (default: blip)
+  --db PATH             SQLite database path (default: video_archive.db)
+  --recursive           Process subdirectories
+  --force               Reprocess already tagged videos
+  --search TAG          Search videos by tag
+  --stats               Show database statistics
+```
+
+## Examples
+
+### Basic Processing
+
+```bash
+# Process with default settings (BLIP model, 8 frames)
+python video_tagger.py vacation.mp4
+
+# Use more frames for longer videos
+python video_tagger.py documentary.mp4 --frames 16
+
+# Use BLIP-2 for better descriptions (needs more VRAM)
+python video_tagger.py video.mp4 --model blip2
+```
+
+### Batch Processing
+
+```bash
+# Process all videos in current directory
+python video_tagger.py .
+
+# Process directory and subdirectories
+python video_tagger.py /videos --recursive
+
+# Use custom database location
+python video_tagger.py /videos --db /my/custom/archive.db
+
+# View what's in the database
+python video_tagger.py . --stats
+```
+
+### Searching
+
+```bash
+# Find all outdoor videos
+python video_tagger.py . --search "outdoor"
+
+# Find videos with food
+python video_tagger.py . --search "food"
+
+# Find videos with people
+python video_tagger.py . --search "people"
+```
+
+## AI Models
+
+### BLIP (Default - Recommended)
+- **Speed**: Fast ⚡
+- **VRAM**: ~3-4GB
+- **Quality**: Good descriptions
+- **Best for**: Most use cases
+
+### BLIP-2
+- **Speed**: Slower
+- **VRAM**: ~6-7GB
+- **Quality**: More detailed descriptions
+- **Best for**: When you need detailed analysis
+
+### CLIP
+- **Speed**: Fastest ⚡⚡
+- **VRAM**: ~2-3GB
+- **Quality**: Category classification
+- **Best for**: Simple categorization, large batches
+
+## Database Schema
+
+The SQLite database contains the following tables:
+
+### videos
+- Complete file metadata (path, size, dates, hash)
+- **Smart datetime parsing** from filenames (e.g., `VID_20231215_142530.mp4`)
+- Video properties (duration, fps, resolution, codec)
+- Processing information
+
+### tags
+- Video tags with confidence scores
+- Indexed for fast searching
+
+### thumbnails
+- 3 random thumbnail frames per video
+- Base64-encoded JPEG images
+- Ready for web display
+
+### frame_descriptions
+- AI-generated descriptions for each analyzed frame
+
+Example filename patterns recognized:
+- `VID_20231215_142530.mp4` → 2023-12-15 14:25:30
+- `2023-12-15_14-25-30.mp4` → 2023-12-15 14:25:30
+- `20231215_142530.mp4` → 2023-12-15 14:25:30
+- `video-2023-12-15.mp4` → 2023-12-15
+
+## Tips for Best Results
+
+1. **Frame Count**: Use 8-12 frames for short videos, 16+ for longer content
+2. **Model Selection**: Start with BLIP, upgrade to BLIP-2 if needed
+3. **GPU Memory**: Close other GPU applications before processing
+4. **Video Quality**: Higher resolution videos produce better tags
+5. **Batch Processing**: Process videos overnight for large collections
+
+## Troubleshooting
+
+### CUDA Out of Memory
+- Use fewer frames: `--frames 6`
+- Switch to smaller model: `--model blip` or `--model clip`
+- Process one video at a time
+
+### Slow Processing
+- Use faster model: `--model clip`
+- Reduce frame count: `--frames 6`
+- Check GPU is being used: `nvidia-smi`
+
+### Import Errors
+```bash
+# Reinstall transformers
+pip install --upgrade transformers accelerate
+
+# For BLIP-2
+pip install salesforce-lavis
+```
+
+## Project Structure
 
 ```
 video-auto-tagger/
-├── DEV-GUIDE.md              # This file
-├── README.md                 # User documentation
-├── requirements.txt          # Python dependencies
-├── setup.py                  # Installation script
-├── config.yaml               # Configuration file
-├── src/
-│   ├── __init__.py
-│   ├── frame_extractor.py    # Video frame sampling ✓
-│   ├── ai_analyzer.py        # AI model integration
-│   ├── tag_manager.py        # Tag processing & storage ✓
-│   └── batch_processor.py    # Main processing pipeline
-├── models/                   # Local AI model cache
-├── data/
-│   └── video_metadata.json   # Output metadata ✓
-└── tests/
-    └── test_extraction.py
+├── frame_extractor.py    # Frame sampling & thumbnail generation
+├── ai_analyzer.py        # AI model integration
+├── db_handler.py         # SQLite database operations ⭐ NEW
+├── video_tagger.py       # Main processing script
+├── requirements.txt      # Dependencies
+├── README.md            # This file
+├── DEV-GUIDE.md         # Development roadmap
+└── video_archive.db     # Generated SQLite database (output)
 ```
 
-## 3. Running Video Tagging
+## Performance
 
-Single video:
+Approximate processing times on RTX 3070:
 
-```bash
-python video_tagger.py your_video.mp4
-```
+- **Short video** (2-3 min): ~15-30 seconds
+- **Medium video** (10 min): ~30-60 seconds
+- **Long video** (30+ min): ~1-2 minutes
 
-Entire directory:
+## Future Improvements
 
-```bash
-python video_tagger.py /path/to/videos --recursive
-```
+- [ ] **Flask Web UI for browsing** (NEXT: Browse tagged videos with thumbnails!)
+- [ ] Multi-threaded batch processing
+- [ ] Scene change detection
+- [ ] Audio analysis integration
+- [ ] Custom tag vocabularies
+- [ ] Video player integration
+- [ ] Tag editing interface
+- [ ] Export to various formats
 
-## 4. Metadata Format
+## License
 
-```json
-{
-  "video_path": "path/to/video.mp4",
-  "processed_date": "2025-01-15T10:30:00",
-  "duration_seconds": 120.5,
-  "tags": ["outdoor", "table", "food", "daytime"],
-  "confidence_scores": {"outdoor": 0.95, "table": 0.88},
-  "frame_count_analyzed": 8
-}
-```
+MIT License - Feel free to use and modify!
 
-## 5. Performance Targets
+## Contributing
 
-* Process 1 video (2-3 min) in < 30 seconds
-* Use < 6GB GPU memory
-* Handle 100+ videos in batch
+Contributions welcome! See DEV-GUIDE.md for development roadmap.
 
-## 6. Notes for AI Coding Agents
+## Support
 
-* Maintain GPU memory efficiency
-* Handle corrupted videos
-* Log all steps for debugging
-* Keep dependencies minimal
-* Prefer config files over hardcoded values
+For issues or questions, check:
+- DEV-GUIDE.md for development details
+- GitHub issues
+- Transformers documentation

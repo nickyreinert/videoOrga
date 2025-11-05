@@ -1,0 +1,9 @@
+venv/**
+.vscode
+.copilot-instructions.md
+workspace.code-workspace   
+test.MP4
+__pycache__/
+*.sqlite3
+*.db
+*.json

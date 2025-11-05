@@ -34,7 +34,18 @@ case "$1" in
         init_database
         echo "Processing videos..."
         # Use a writable DB path under /app/data (the /videos mount may be read-only)
-        python3 video_tagger.py "/videos" --db /app/data/video_metadata.db --recursive ${@:2}
+        # Allow the caller to pass an explicit input path as the first argument
+        # after 'process' (e.g. `process /videos/test.MP4 --force`). If the first
+        # argument starts with '-' or is empty, default to the whole /videos dir.
+        # Shift away the 'process' command so $@ contains the user's args.
+        shift
+        if [ "$#" -gt 0 ] && [ "${1#-}" = "$1" ]; then
+            INPUT="$1"
+            shift
+        else
+            INPUT="/videos"
+        fi
+        python3 video_tagger.py "$INPUT" --db /app/data/video_metadata.db --recursive "$@"
         ;;
     *)
         exec "$@"

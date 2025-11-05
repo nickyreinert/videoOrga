@@ -405,7 +405,7 @@ python video_tagger.py /videos --recursive --audio --whisper-model medium --forc
 
 ## Future Improvements
 
-- [ ] **Flask Web UI for browsing** (NEXT: Browse tagged videos with thumbnails!)
+- [ ] Flask Web UI for browsing (NEXT: Browse tagged videos with thumbnails!)
 - [ ] Multi-threaded batch processing
 - [ ] Scene change detection
 - [ ] Audio analysis integration

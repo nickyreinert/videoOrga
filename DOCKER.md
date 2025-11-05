@@ -1,3 +1,13 @@
+# Adjust your mounting point in docker-compose.yml:
+```
+    volumes:
+      # Mount video directory (read-only)
+      - type: bind
+        source: /e/OneDrive/Projekte/Video
+        target: /videos
+        read_only: true
+```
+
 # Build the image
 docker compose build
 

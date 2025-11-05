@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   video-tagger:
     build: .
@@ -12,14 +10,25 @@ services:
         target: /videos
         read_only: true
       # Mount for persistent data (database, thumbnails, cache)
-      - type: volume
-        source: video_data
+      - type: bind
+        source: ./data
         target: /app/data
+      # Mount for model/cache files to avoid re-downloading large models
+      - type: bind
+        # Use a local folder in the project for cached models (relative paths
+        # work with Docker Compose; on Windows this will be under the repo root)
+        source: ./model_cache
+        target: /app/models
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - VIDEO_BASE_PATH=/videos
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
+      # Cache/config locations for transformers / torch / huggingface
+      - TRANSFORMERS_CACHE=/app/models/transformers
+      - HF_HOME=/app/models/huggingface
+      - TORCH_HOME=/app/models/torch
+      - XDG_CACHE_HOME=/app/models/cache
     deploy:
       resources:
         reservations:

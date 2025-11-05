@@ -9,6 +9,7 @@ from pathlib import Path
 from functools import lru_cache
 import mmap
 import logging
+import subprocess
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,36 +28,19 @@ THUMBNAIL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data",
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(THUMBNAIL_DIR, exist_ok=True)
 
-def windows_to_wsl_path(windows_path):
-    """Convert Windows path to WSL path"""
-    # Convert to PureWindowsPath to handle Windows-style paths
-    win_path = PureWindowsPath(windows_path)
-    # Get drive letter and convert to lowercase
-    drive = win_path.drive.lower().rstrip(':')
-    # Convert path to posix and combine with WSL mount point
-    rest_of_path = str(win_path).replace(win_path.drive, '').replace('\\', '/')
-    return f"/mnt/{drive}{rest_of_path}"
-
-def wsl_to_windows_path(wsl_path):
-    """Convert WSL path to Windows path"""
-    if wsl_path.startswith('/mnt/'):
-        # Extract drive letter and rest of path
-        parts = wsl_path.split('/')
-        drive = parts[2].upper()
-        rest_of_path = '/'.join(parts[3:])
-        return f"{drive}:/{rest_of_path}"
-    return wsl_path
-
 def get_db():
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 def get_video_path(relative_path, for_windows=False):
-    """Convert relative path to absolute path in either WSL or Windows format"""
-    if for_windows:
-        return os.path.join(WINDOWS_VIDEO_PATH, relative_path)
-    return os.path.join(WSL_VIDEO_PATH, relative_path)
+    """Convert relative path to absolute path based on VIDEO_BASE_PATH.
+
+    This simplified helper returns a path under the configured
+    `VIDEO_BASE_PATH` mount. For opening videos on the host the UI
+    expects a path that points into the host-mounted folder.
+    """
+    return os.path.join(VIDEO_BASE_PATH, relative_path)
 
 def check_file_exists(wsl_path):
     """Check if a file exists using WSL path"""
@@ -70,15 +54,21 @@ def index():
     db = get_db()
     cursor = db.cursor()
     
-    # Get all videos with their metadata
+    # Get all videos with their metadata (adapted to db_handler schema)
     cursor.execute("""
-        SELECT v.id, v.filename, v.file_path, v.creation_date, v.duration,
-               v.thumbnail_data, GROUP_CONCAT(t.tag_name) as tags
+        SELECT v.id,
+               v.file_name AS filename,
+               v.file_path,
+               v.file_created_date AS creation_date,
+               v.duration_seconds AS duration,
+               (
+                   SELECT image_data FROM thumbnails th WHERE th.video_id = v.id LIMIT 1
+               ) AS thumbnail_data,
+               GROUP_CONCAT(t.tag) AS tags
         FROM videos v
-        LEFT JOIN video_tags vt ON v.id = vt.video_id
-        LEFT JOIN tags t ON vt.tag_id = t.id
+        LEFT JOIN tags t ON v.id = t.video_id
         GROUP BY v.id
-        ORDER BY v.creation_date DESC
+        ORDER BY v.file_created_date DESC
     """)
     videos = cursor.fetchall()
     
@@ -105,8 +95,8 @@ def get_videos():
     cursor = db.cursor()
     
     query = """
-        SELECT DISTINCT v.id, v.filename, v.file_path, v.creation_date, 
-               v.duration, v.thumbnail_data
+        SELECT DISTINCT v.id, v.file_name AS filename, v.file_path,
+               v.file_created_date AS creation_date, v.duration_seconds AS duration
         FROM videos v
     """
     
@@ -114,13 +104,11 @@ def get_videos():
     params = []
     
     if tags:
-        query += """
-            JOIN video_tags vt ON v.id = vt.video_id
-            JOIN tags t ON vt.tag_id = t.id
-        """
+        # Our tags table uses a per-video tag record (video_id, tag, confidence)
         placeholders = ','.join('?' * len(tags))
-        conditions.append(f"t.tag_name IN ({placeholders})")
+        conditions.append(f"t.tag IN ({placeholders})")
         params.extend(tags)
+        query += " JOIN tags t ON v.id = t.video_id "
     
     if start_date:
         conditions.append("v.creation_date >= ?")
@@ -150,10 +138,9 @@ def get_tags():
     db = get_db()
     cursor = db.cursor()
     cursor.execute("""
-        SELECT t.tag_name, COUNT(vt.video_id) as count
+        SELECT t.tag as tag_name, COUNT(*) as count
         FROM tags t
-        LEFT JOIN video_tags vt ON t.id = vt.tag_id
-        GROUP BY t.tag_name
+        GROUP BY t.tag
         ORDER BY count DESC
     """)
     tags = cursor.fetchall()
@@ -188,24 +175,16 @@ def update_tags(video_id):
     cursor = db.cursor()
     
     try:
-        # Remove existing tags
-        cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (video_id,))
-        
-        # Add new tags
+        # Remove existing tags for this video
+        cursor.execute("DELETE FROM tags WHERE video_id = ?", (video_id,))
+
+        # Insert new tags (tags table stores tag per video in this schema)
         for tag in new_tags:
-            # First ensure the tag exists
             cursor.execute(
-                "INSERT OR IGNORE INTO tags (tag_name) VALUES (?)",
-                (tag,)
+                "INSERT INTO tags (video_id, tag, confidence) VALUES (?, ?, ?)",
+                (video_id, tag, 1.0)
             )
-            cursor.execute(
-                """
-                INSERT INTO video_tags (video_id, tag_id)
-                SELECT ?, id FROM tags WHERE tag_name = ?
-                """,
-                (video_id, tag)
-            )
-        
+
         db.commit()
         return jsonify({"status": "success", "tags": new_tags})
     except Exception as e:

@@ -12,8 +12,8 @@ numpy>=1.24.0
 transformers>=4.30.0
 accelerate>=0.20.0
 
-# Audio transcription (optional, for --audio flag)
-# openai-whisper  # Install separately if you want audio transcription
+# Audio transcription
+openai-whisper  # Install separately if you want audio transcription
 # NOTE: Whisper requires FFmpeg to be installed on your system
 
 # Optional: For BLIP-2 support

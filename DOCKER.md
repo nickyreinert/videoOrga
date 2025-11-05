@@ -1,14 +1,14 @@
 # Build the image
-docker-compose build
+docker compose build
 
 # Start the web service
-docker-compose up -d
+docker compose up -d
 
 # Process all videos in the directory
-docker-compose run --rm video-tagger process --audio
+docker compose run --rm video-tagger process --audio
 
 # Process a specific video with force flag
-docker-compose run --rm video-tagger process --audio --force "/videos/test.MP4"
+docker compose run --rm video-tagger process --audio --force "/videos/test.MP4"
 
 # Check GPU status
 docker exec video-tagger nvidia-smi

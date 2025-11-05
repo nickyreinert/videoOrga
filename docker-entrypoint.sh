@@ -1,10 +1,13 @@
 #!/bin/bash
 set -e
 
+# Normalize environment and ensure script runs with LF line endings
+export LC_ALL=C.UTF-8
+
 # Function to wait for GPU availability
 wait_for_gpu() {
     echo "Checking GPU availability..."
-    while ! nvidia-smi > /dev/null 2>&1; do
+    while ! command -v nvidia-smi >/dev/null 2>&1 || ! nvidia-smi >/dev/null 2>&1; do
         echo "Waiting for GPU to become available..."
         sleep 2
     done

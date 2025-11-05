@@ -4,6 +4,10 @@ docker compose build
 # Start the web service
 docker compose up -d
 
+# Watch the logs
+
+docker compose logs -f --tail=200
+
 # Process all videos in the directory
 docker compose run --rm video-tagger process --audio
 

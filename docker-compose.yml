@@ -6,7 +6,7 @@ services:
     volumes:
       # Mount video directory (read-only)
       - type: bind
-        source: /e/OneDrive/Projekte/Video
+        source: /e/OneDrive/Videos
         target: /videos
         read_only: true
       # Mount for persistent data (database, thumbnails, cache)

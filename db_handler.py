@@ -620,3 +620,32 @@ if __name__ == "__main__":
         print(f"  {key}: {value}")
     
     db.close()
+
+
+def init_db(db_path: str = None):
+    """
+    Initialize the on-disk database file used by the application.
+
+    This function is a small compatibility helper used by the Docker
+    entrypoint which expects a top-level `init_db` callable in
+    `db_handler` that will create the database file and required tables.
+
+    Args:
+        db_path: Optional path to the SQLite database file. If omitted
+                 will use the VIDEO_DB_PATH environment variable or
+                 default to `/app/data/video_metadata.db`.
+    Returns:
+        The path to the created database file.
+    """
+    if db_path is None:
+        db_path = os.environ.get('VIDEO_DB_PATH', '/app/data/video_metadata.db')
+
+    # Ensure parent directory exists
+    parent = os.path.dirname(db_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+    # Create and immediately close the database (tables are created in constructor)
+    db = DatabaseHandler(db_path)
+    db.close()
+    return db_path

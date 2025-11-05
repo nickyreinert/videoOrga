@@ -1,0 +1,47 @@
+.tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tag-cloud .tag {
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    background-color: #e9ecef;
+    transition: background-color 0.2s;
+}
+
+.tag-cloud .tag.selected {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.card-img-top {
+    height: 200px;
+    object-fit: cover;
+}
+
+.video-item {
+    transition: transform 0.2s;
+}
+
+.video-item:hover {
+    transform: translateY(-5px);
+}
+
+.tags .badge {
+    cursor: pointer;
+}
+
+#currentTags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+#currentTags .badge {
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.5rem;
+}

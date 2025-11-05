@@ -22,6 +22,11 @@ accelerate>=0.20.0
 # Utilities
 tqdm>=4.65.0
 
+# Web Interface
+flask>=2.3.0
+flask-cors>=4.0.0
+humanize>=4.8.0
+
 # Note: FFmpeg must be installed on your system for audio extraction
 # Linux: sudo apt install ffmpeg
 # Mac: brew install ffmpeg

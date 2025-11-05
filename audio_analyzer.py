@@ -91,7 +91,7 @@ class AudioAnalyzer:
                 "summarization",
                 model=model_name,
                 device=0 if self.device == "cuda" else -1,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+                dtype=torch.float16 if self.device == "cuda" else torch.float32
             )
             
             print("Summarization model loaded successfully")
@@ -211,13 +211,13 @@ class AudioAnalyzer:
                 'error': str(e)
             }
     
-    def summarize_text(self, text: str, max_length: int = 130, min_length: int = 30) -> str:
+    def summarize_text(self, text: str, max_length: Optional[int] = None, min_length: int = 30) -> str:
         """
         Summarize text using local LLM
         
         Args:
             text: Text to summarize
-            max_length: Maximum summary length in tokens
+            max_length: Maximum summary length in tokens (default: input_length/2)
             min_length: Minimum summary length in tokens
             
         Returns:
@@ -240,6 +240,11 @@ class AudioAnalyzer:
             words = text.split()
             if len(words) > max_input_length:
                 text = " ".join(words[:max_input_length])
+            
+            # Calculate appropriate max_length if not provided
+            input_length = len(text.split())
+            if max_length is None:
+                max_length = max(min_length, input_length // 2)  # Target 50% reduction
             
             # Generate summary
             summary = self.summarizer(

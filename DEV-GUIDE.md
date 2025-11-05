@@ -23,8 +23,8 @@ Automated video tagging system that extracts frames from videos, analyzes them u
 - [x] Document system requirements
 - [x] List dependencies
 - [ ] Create virtual environment setup script
-- [ ] Install CUDA-enabled PyTorch
-- [ ] Install video processing libraries
+- [x] Install CUDA-enabled PyTorch
+- [x] Install video processing libraries
 
 ### Phase 2: Video Frame Extraction ✓
 - [x] Implement frame sampling logic
@@ -72,7 +72,7 @@ Automated video tagging system that extracts frames from videos, analyzes them u
 - [ ] Export formats (CSV, JSON, database)
 - [ ] Flask Web UI for browsing (NEXT PHASE)
 
-### Phase 6.5: Audio Analysis (NEW)
+### Phase 6.5: Audio Analysis
 - [ ] Extract audio from video (FFmpeg)
 - [ ] Transcribe with Whisper (OpenAI, runs locally on GPU)
 - [ ] Summarize transcription with local LLM

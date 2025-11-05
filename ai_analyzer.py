@@ -59,10 +59,10 @@ class AIAnalyzer:
             # Use the smaller BLIP-2 variant for 8GB VRAM
             model_id = "Salesforce/blip2-opt-2.7b"
             
-            self.processor = Blip2Processor.from_pretrained(model_id)
+            self.processor = Blip2Processor.from_pretrained(model_id, use_fast=True)
             self.model = Blip2ForConditionalGeneration.from_pretrained(
                 model_id,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map=self.device
             )
             
@@ -80,10 +80,10 @@ class AIAnalyzer:
             
             model_id = "Salesforce/blip-image-captioning-large"
             
-            self.processor = BlipProcessor.from_pretrained(model_id)
+            self.processor = BlipProcessor.from_pretrained(model_id, use_fast=True)
             self.model = BlipForConditionalGeneration.from_pretrained(
                 model_id,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+                dtype=torch.float16 if self.device == "cuda" else torch.float32
             ).to(self.device)
             
             print("BLIP model loaded successfully")

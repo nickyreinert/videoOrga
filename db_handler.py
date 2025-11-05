@@ -141,13 +141,41 @@ class DatabaseHandler:
         
         # Create full-text search for transcripts (optional but recommended)
         try:
+            # Create FTS5 table
             self.cursor.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS videos_fts USING fts5(
-                    video_id, transcript, transcript_summary, content=videos, content_rowid=id
+                    transcript, transcript_summary,
+                    content='videos',
+                    content_rowid='id'
                 )
             """)
-        except:
-            pass  # FTS5 might not be available in all SQLite versions
+            
+            # Create triggers to keep FTS table in sync
+            self.cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS videos_ai AFTER INSERT ON videos BEGIN
+                    INSERT INTO videos_fts(rowid, transcript, transcript_summary)
+                    VALUES (new.id, new.transcript, new.transcript_summary);
+                END;
+            """)
+            
+            self.cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS videos_ad AFTER DELETE ON videos BEGIN
+                    INSERT INTO videos_fts(videos_fts, rowid, transcript, transcript_summary)
+                    VALUES('delete', old.id, old.transcript, old.transcript_summary);
+                END;
+            """)
+            
+            self.cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS videos_au AFTER UPDATE ON videos BEGIN
+                    INSERT INTO videos_fts(videos_fts, rowid, transcript, transcript_summary)
+                    VALUES('delete', old.id, old.transcript, old.transcript_summary);
+                    INSERT INTO videos_fts(rowid, transcript, transcript_summary)
+                    VALUES (new.id, new.transcript, new.transcript_summary);
+                END;
+            """)
+            
+        except Exception as e:
+            print(f"Warning: FTS5 setup failed: {e}")  # FTS5 might not be available in all SQLite versions
         
         self.conn.commit()
     
@@ -451,6 +479,20 @@ class DatabaseHandler:
         stats['total_words_transcribed'] = total_words if total_words else 0
         
         return stats
+    
+    def rebuild_fts(self):
+        """Rebuild the full-text search index"""
+        try:
+            self.cursor.execute("DELETE FROM videos_fts")
+            self.cursor.execute("""
+                INSERT INTO videos_fts(rowid, transcript, transcript_summary)
+                SELECT id, transcript, transcript_summary FROM videos
+                WHERE transcript IS NOT NULL OR transcript_summary IS NOT NULL
+            """)
+            self.conn.commit()
+            print("Full-text search index rebuilt successfully")
+        except Exception as e:
+            print(f"Warning: Failed to rebuild FTS index: {e}")
     
     def close(self):
         """Close database connection"""

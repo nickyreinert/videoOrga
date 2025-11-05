@@ -25,10 +25,10 @@ services:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
       # Cache/config locations for transformers / torch / huggingface
-      - TRANSFORMERS_CACHE=/app/models/transformers
       - HF_HOME=/app/models/huggingface
       - TORCH_HOME=/app/models/torch
       - XDG_CACHE_HOME=/app/models/cache
+  # TRANSFORMERS_CACHE is deprecated in transformers v5; use HF_HOME instead
     deploy:
       resources:
         reservations:

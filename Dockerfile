@@ -1,4 +1,5 @@
 # Use NVIDIA CUDA base image
+# syntax=docker/dockerfile:1.4
 FROM nvidia/cuda:12.0.1-base-ubuntu22.04
 
 # Set environment variables
@@ -19,11 +20,13 @@ WORKDIR /app
 # Install Python dependencies
 COPY requirements.txt .
 
-# Install PyTorch with CUDA support first
-RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install --upgrade pip setuptools wheel && \
+    pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
 # Install other dependencies
-RUN pip3 install -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install -r requirements.txt
 
 # Copy application code
 COPY . .

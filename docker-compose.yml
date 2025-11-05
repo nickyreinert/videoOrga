@@ -1,6 +1,10 @@
+
 services:
   video-tagger:
-    build: .
+    build: 
+      context: .
+      args:
+          - BUILDKIT_INLINE_CACHE=1
     ports:
       - "5000:5000"
     volumes:

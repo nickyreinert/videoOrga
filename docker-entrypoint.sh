@@ -33,7 +33,8 @@ case "$1" in
         wait_for_gpu
         init_database
         echo "Processing videos..."
-        python3 video_tagger.py "/videos" --recursive ${@:2}
+        # Use a writable DB path under /app/data (the /videos mount may be read-only)
+        python3 video_tagger.py "/videos" --db /app/data/video_metadata.db --recursive ${@:2}
         ;;
     *)
         exec "$@"

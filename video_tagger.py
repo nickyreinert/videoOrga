@@ -25,9 +25,7 @@ class VideoTagger:
                  model_name: str = "blip",
                  db_path: str = None,
                  enable_audio: bool = False,
-                 whisper_model: str = "base",
-                 language: str = None,
-                 no_pre_detect: bool = False):
+                 whisper_model: str = "base", language: str = None):
         """
         Initialize video tagger with SQLite backend
         
@@ -38,7 +36,6 @@ class VideoTagger:
             enable_audio: Whether to transcribe and summarize audio
             whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
             language: Language for transcription ('en', 'de', etc.) or None for auto-detect
-            no_pre_detect: Disable language pre-detection when multiple languages are given
         """
         self.extractor = FrameExtractor(num_frames=num_frames)
         self.analyzer = AIAnalyzer(model_name=model_name)
@@ -49,8 +46,7 @@ class VideoTagger:
             self.audio_analyzer = AudioAnalyzer(
                 whisper_model=whisper_model,
                 device="auto",
-                language=language,
-                no_pre_detect=no_pre_detect
+                language=language
             )
         else:
             self.audio_analyzer = None
@@ -379,13 +375,8 @@ Examples:
     parser.add_argument(
         '--language',
         type=str,
-        default='de,en',
-        help='Force transcription language(s) (e.g., "en" or "de,en"). Skips auto-detection if one language is given, otherwise pre-detects within the list.'
-    )
-    parser.add_argument(
-        '--no-language-pre-detect',
-        action='store_true',
-        help='Disable pre-detection when multiple languages are provided. Uses the first language in the list.'
+        default='de',
+        help='Force transcription language (default: de). Use a comma-separated list like "de,en" to enable pre-detection within that list.'
     )
     parser.add_argument(
         '--recursive',
@@ -426,8 +417,7 @@ Examples:
         db_path=db_path,
         enable_audio=args.audio,
         whisper_model=args.whisper_model,
-        language=args.language,
-        no_pre_detect=args.no_language_pre_detect
+        language=args.language
     )
     
     try:

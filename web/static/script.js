@@ -51,7 +51,7 @@ async function loadTags() {
         
         const tagCloud = document.getElementById('tag-cloud');
         tagCloud.innerHTML = tags.map(tag => `
-            <span class="tag ${selectedTags.includes(tag.tag_name) ? 'selected' : ''}" onclick="toggleTag('${tag.tag_name}')">
+            <span class="tag ${selectedTags.includes(tag.tag_name) ? 'selected' : ''}" data-tag="${tag.tag_name}" onclick="toggleTag('${tag.tag_name}')">
                 ${tag.tag_name} (${tag.count})
             </span>
         `).join('');
@@ -69,11 +69,11 @@ function toggleTag(tagName) {
         selectedTags.splice(index, 1);
     }
     
-    // Update UI to reflect selected tags
-    document.querySelectorAll('.tag').forEach(tagSpan => {
-        if (tagSpan.textContent.startsWith(tagName + ' ')) { // Match by tag name
-            tagSpan.classList.toggle('selected', selectedTags.includes(tagName));
-        }
+    // Also re-render the main tag cloud to show selection state
+    const tagCloud = document.getElementById('tag-cloud');
+    tagCloud.querySelectorAll('.tag').forEach(tagSpan => {
+        const currentTagName = tagSpan.dataset.tag;
+        tagSpan.classList.toggle('selected', selectedTags.includes(currentTagName));
     });
     
     filterVideos();
@@ -137,7 +137,9 @@ function updateVideoGrid() {
                     </p>
                     <div class="tags mb-2">
                         ${(video.tags || []).map(tag => 
-                            `<span class="badge bg-primary me-1">${tag}</span>`
+                            `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" 
+                                  onclick="event.stopPropagation(); toggleTag('${tag}');">${tag}
+                            </span>`
                         ).join('')}
                     </div>
                 </div>
@@ -181,7 +183,9 @@ function renderListView() {
                         <td>${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</td>
                         <td>
                             ${(video.tags || []).map(tag => `<span class="badge bg-primary me-1">${tag}</span>`).join('')}
-                        </td>
+                            ${(video.tags || []).map(tag => 
+                                `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="toggleTag('${tag}')">${tag}</span>`
+                            ).join('')}                        </td>
                         <td>
                             <button class="btn btn-primary btn-sm" onclick="openVideo('${video.file_path}')">Open</button>
                             <button class="btn btn-secondary btn-sm" onclick='openVideoDetailModal(${video.id})'>Details</button>

@@ -54,9 +54,41 @@ def get_videos():
     db = get_db()
     cursor = db.cursor()
 
-    # Basic query
-    query = "SELECT * FROM videos ORDER BY parsed_datetime DESC, file_modified_date DESC"
-    cursor.execute(query)
+    # Get query parameters
+    tags = request.args.getlist('tags')
+    search_text = request.args.get('search')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    # Build the query dynamically
+    query = "SELECT DISTINCT v.* FROM videos v"
+    conditions = []
+    params = []
+
+    if tags:
+        query += " JOIN tags t ON v.id = t.video_id"
+        # Ensure that videos have ALL specified tags
+        for tag in tags:
+            conditions.append("v.id IN (SELECT video_id FROM tags WHERE tag = ?)")
+            params.append(tag)
+
+    if search_text:
+        conditions.append("(v.file_name LIKE ? OR v.transcript LIKE ?)")
+        params.extend([f"%{search_text}%", f"%{search_text}%"])
+
+    if start_date:
+        conditions.append("v.parsed_datetime >= ?")
+        params.append(start_date)
+
+    if end_date:
+        conditions.append("v.parsed_datetime <= ?")
+        params.append(end_date)
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += " ORDER BY v.parsed_datetime DESC, v.file_modified_date DESC"
+    cursor.execute(query, params)
     videos = [dict(row) for row in cursor.fetchall()]
 
     # Add tags and thumbnails to each video

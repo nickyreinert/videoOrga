@@ -45,3 +45,11 @@
     font-size: 1rem;
     padding: 0.5rem;
 }
+
+.video-tag {
+    cursor: pointer;
+}
+.video-tag.bg-success {
+    border: 2px solid #198754; /* A slightly darker green border */
+    box-shadow: 0 0 5px rgba(25, 135, 84, 0.5);
+}

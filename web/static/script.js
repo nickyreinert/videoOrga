@@ -5,6 +5,7 @@ let videos = [];
 let sortState = { key: 'creation_date', order: 'desc' };
 let currentPage = 1;
 let itemsPerPage = 12;
+let player = null;
 
 // Debounce function to limit how often a function can run
 function debounce(func, delay) {
@@ -41,6 +42,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
         console.error('Error during DOMContentLoaded:', error);
     }
+
+    // Handle modal close event to stop video playback
+    const videoPlayerModal = document.getElementById('videoPlayerModal');
+    videoPlayerModal.addEventListener('hidden.bs.modal', () => {
+        if (player) {
+            player.pause();
+        }
+    });
 });
 
 // Load and display tags in the tag cloud
@@ -187,7 +196,7 @@ function renderListView() {
                                 `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="toggleTag('${tag}')">${tag}</span>`
                             ).join('')}                        </td>
                         <td>
-                            <button class="btn btn-primary btn-sm" onclick="openVideo('${video.file_path}')">Open</button>
+                            <button class="btn btn-primary btn-sm" onclick="openVideo(${video.id})">Open</button>
                             <button class="btn btn-secondary btn-sm" onclick='openVideoDetailModal(${video.id})'>Details</button>
                         </td>
                     </tr>
@@ -261,7 +270,18 @@ function changePage(page) {
 
 // Open video in system player or stream
 function openVideo(videoId) {
-    window.open(`/video/stream/${videoId}`, '_blank');
+    const videoUrl = `/video/stream/${videoId}`;
+    const modal = new bootstrap.Modal(document.getElementById('videoPlayerModal'));
+
+    if (!player) {
+        player = videojs('main-video-player');
+    }
+
+    player.src({
+        src: videoUrl,
+        type: 'video/mp4'
+    });
+    modal.show();
 }
 
 // Play video from the modal

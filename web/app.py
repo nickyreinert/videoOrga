@@ -157,20 +157,45 @@ def stream_video(video_id):
     if not video:
         return "Video not found", 404
 
-    video_path = os.path.join(VIDEO_BASE_PATH, video['file_path'])
+    # The database stores the absolute path, so we use it directly.
+    # We no longer need to join it with VIDEO_BASE_PATH.
+    video_path = video['file_path']
 
     if not os.path.exists(video_path):
         return "Video file not found on disk", 404
 
+    range_header = request.headers.get('Range', None)
+    size = os.path.getsize(video_path)
+    byte1, byte2 = 0, None
+
+    if range_header:
+        match = re.search(r'(\d+)-(\d*)', range_header)
+        groups = match.groups()
+
+        if groups[0]:
+            byte1 = int(groups[0])
+        if groups[1]:
+            byte2 = int(groups[1])
+
+    if byte2 is None:
+        byte2 = size - 1
+
+    length = byte2 - byte1 + 1
+    
     def generate():
-        with open(video_path, "rb") as f:
+        with open(video_path, 'rb') as f:
+            f.seek(byte1)
             while True:
-                chunk = f.read(4096)
+                chunk = f.read(min(length, 65536))
                 if not chunk:
                     break
                 yield chunk
 
-    return Response(generate(), mimetype="video/mp4")
+    rv = Response(generate(), 206, mimetype="video/mp4", direct_passthrough=True)
+    rv.headers.add('Content-Range', f'bytes {byte1}-{byte2}/{size}')
+    rv.headers.add('Accept-Ranges', 'bytes')
+    rv.headers.add('Content-Length', str(length))
+    return rv
 
 if __name__ == '__main__':
     if not VIDEO_BASE_PATH or not os.path.isdir(VIDEO_BASE_PATH):

@@ -53,3 +53,25 @@
     border: 2px solid #198754; /* A slightly darker green border */
     box-shadow: 0 0 5px rgba(25, 135, 84, 0.5);
 }
+
+/* Video Player Modal Styling */
+#videoPlayerModal .modal-dialog {
+    max-width: 90vw;
+    margin: 1.75rem auto;
+}
+
+#videoPlayerModal .modal-content {
+    height: 85vh;
+    background-color: #000;
+    border: none;
+}
+
+#videoPlayerModal .modal-body {
+    padding: 0;
+    height: 100%;
+}
+
+#main-video-player {
+    width: 100% !important;
+    height: 100% !important;
+}

@@ -44,62 +44,8 @@ async function loadTags() {
             <span class="tag" onclick="toggleTag('${tag.tag_name}')">
                 ${tag.tag_name} (${tag.count})
             </span>
-            `}).join('');
-        }
-        
-        // Render the list view
-        function renderListView(videos) {
-            const grid = document.getElementById('video-grid');
-            grid.innerHTML = `
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th scope="col" onclick="sortVideos('filename')">Filename <i class="fas fa-sort"></i></th>
-                            <th scope="col" onclick="sortVideos('creation_date')">Creation Date <i class="fas fa-sort"></i></th>
-                            <th scope="col">Tags</th>
-                            <th scope="col">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${videos.map(video => `
-                            <tr>
-                                <td>${video.filename}</td>
-                                <td>${new Date(video.creation_date).toLocaleDateString()}</td>
-                                <td>
-                                    ${(video.tags || []).map(tag => `<span class="badge bg-primary me-1">${tag}</span>`).join('')}
-                                </td>
-                                <td>
-                                    <button class="btn btn-primary btn-sm" onclick="openVideo('${video.file_path}')">Open</button>
-                                    <button class="btn btn-secondary btn-sm" onclick='openVideoDetailModal(${JSON.stringify(video)})'>Details</button>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                `;
-            }
-            
-            // Sort videos
-            function sortVideos(key) {
-                if (sortState.key === key) {
-                    sortState.order = sortState.order === 'asc' ? 'desc' : 'asc';
-                } else {
-                    sortState.key = key;
-                    sortState.order = 'asc';
-                }
-            
-                videos.sort((a, b) => {
-                    if (a[key] < b[key]) {
-                        return sortState.order === 'asc' ? -1 : 1;
-                    }
-                    if (a[key] > b[key]) {
-                        return sortState.order === 'asc' ? 1 : -1;
-                    }
-                    return 0;
-                });
-            
-                renderListView(videos);
-            } catch (error) {
+        `).join('');
+    } catch (error) {
         console.error('Error loading tags:', error);
     }
 }
@@ -136,9 +82,12 @@ async function filterVideos() {
     if (endDate) params.append('end_date', endDate);
     selectedTags.forEach(tag => params.append('tags', tag));
     
+    console.log('Fetching videos with params:', params.toString());
     try {
         const response = await fetch(`/api/videos?${params.toString()}`);
+        console.log('Response from server:', response);
         videos = await response.json();
+        console.log('Videos data:', videos);
         currentPage = 1; // Reset to first page
         renderPage();
     } catch (error) {
@@ -189,10 +138,6 @@ function updateVideoGrid() {
                             onclick="openVideo('${video.file_path}')">
                         Open Video
                     </button>
-                    <button class="btn btn-secondary btn-sm" 
-                            onclick="openVideoDetailModal(${JSON.stringify(video)})">
-                        Edit Tags
-                    </button>
                     <button class="btn btn-danger btn-sm" 
                             onclick="deleteVideo(${video.id})">
                         <i class="fas fa-trash"></i>
@@ -234,6 +179,27 @@ function renderListView() {
             </tbody>
         </table>
     `;
+}
+
+function sortVideos(key) {
+    if (sortState.key === key) {
+        sortState.order = sortState.order === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortState.key = key;
+        sortState.order = 'asc';
+    }
+
+    videos.sort((a, b) => {
+        if (a[key] < b[key]) {
+            return sortState.order === 'asc' ? -1 : 1;
+        }
+        if (a[key] > b[key]) {
+            return sortState.order === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
+
+    renderPage();
 }
 
 function renderPage() {
@@ -314,12 +280,6 @@ async function deleteVideo(videoId) {
         alert('Error deleting video');
     }
 }
-
-
-
-
-
-
 
 // Utility function to debounce filter calls
 function debounce(func, wait) {

@@ -32,6 +32,7 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - VIDEO_BASE_PATH=/videos
+      - FLASK_APP=web/app.py   # >>> NEW: Point to the Flask app location <<<
       - FLASK_ENV=development  # Changed to development for auto-reload
       - FLASK_DEBUG=1          # Enable debug mode for live reload
       - PYTHONUNBUFFERED=1

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, url_for
+from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
 import os
 import json
@@ -31,6 +31,8 @@ os.makedirs(THUMBNAIL_DIR, exist_ok=True)
 def get_db():
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
+    # Increase the group_concat_max_len to avoid truncated thumbnail data
+    conn.execute("PRAGMA group_concat_max_len = 1000000")
     return conn
 
 def get_video_path(relative_path, for_windows=False):
@@ -50,39 +52,10 @@ def check_file_exists(wsl_path):
         return False
 
 @app.route('/')
-def index():
-    db = get_db()
-    cursor = db.cursor()
-    
-    # Get all videos with their metadata (adapted to db_handler schema)
-    cursor.execute("""
-        SELECT v.id,
-               v.file_name AS filename,
-               v.file_path,
-               v.file_created_date AS creation_date,
-               v.duration_seconds AS duration,
-               (
-                   SELECT image_data FROM thumbnails th WHERE th.video_id = v.id LIMIT 1
-               ) AS thumbnail_data,
-               GROUP_CONCAT(t.tag) AS tags
-        FROM videos v
-        LEFT JOIN tags t ON v.id = t.video_id
-        GROUP BY v.id
-        ORDER BY v.file_created_date DESC
-    """)
-    videos = cursor.fetchall()
-    
-    processed_videos = []
-    for video in videos:
-        # Convert video data to dictionary
-        video_data = dict(video)
-        video_data['tags'] = video_data['tags'].split(',') if video_data['tags'] else []
-        video_data['friendly_date'] = humanize.naturaldate(datetime.fromisoformat(video_data['creation_date']))
-        video_data['friendly_duration'] = humanize.precisedelta(video_data['duration'])
-        video_data['file_exists'] = os.path.exists(get_video_path(video_data['file_path']))
-        processed_videos.append(video_data)
 
-    return render_template('index.html', videos=processed_videos)
+def index():
+
+    return render_template('index.html')
 
 @app.route('/api/videos')
 def get_videos():
@@ -95,8 +68,15 @@ def get_videos():
     cursor = db.cursor()
     
     query = """
-        SELECT DISTINCT v.id, v.file_name AS filename, v.file_path,
-               v.file_created_date AS creation_date, v.duration_seconds AS duration
+        SELECT v.id,
+               v.file_name AS filename,
+               v.file_path,
+               v.file_created_date AS creation_date,
+               v.duration_seconds AS duration,
+               (
+                   SELECT GROUP_CONCAT(image_data) FROM thumbnails th WHERE th.video_id = v.id
+               ) AS thumbnail_data,
+               GROUP_CONCAT(t.tag) AS tags
         FROM videos v
     """
     
@@ -126,12 +106,20 @@ def get_videos():
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     
-    query += " ORDER BY v.creation_date DESC"
+    query += " GROUP BY v.id ORDER BY v.file_created_date DESC"
     
     cursor.execute(query, params)
     videos = cursor.fetchall()
     
-    return jsonify([dict(video) for video in videos])
+    processed_videos = []
+    for video in videos:
+        video_data = dict(video)
+        video_data['tags'] = video_data['tags'].split(',') if video_data['tags'] else []
+        video_data['thumbnail_data'] = video_data['thumbnail_data'].split(',') if video_data['thumbnail_data'] else []
+        processed_videos.append(video_data)
+    
+    print(processed_videos)
+    return jsonify(processed_videos)
 
 @app.route('/api/tags')
 def get_tags():
@@ -148,23 +136,52 @@ def get_tags():
 
 @app.route('/video/<path:video_path>')
 def open_video(video_path):
-    """Handle video opening through Windows default player"""
-    # Get both WSL and Windows paths
-    wsl_path = get_video_path(video_path, for_windows=False)
-    windows_path = get_video_path(video_path, for_windows=True)
-    
-    if check_file_exists(wsl_path):
+    """Handle video opening through the host's default player"""
+    if not VIDEO_BASE_PATH or not os.path.isdir(VIDEO_BASE_PATH):
+        return jsonify({"error": "VIDEO_BASE_PATH is not configured or not a directory."}), 500
+
+    # Construct the absolute path to the video file
+    abs_video_path = os.path.join(VIDEO_BASE_PATH, video_path)
+
+    if os.path.exists(abs_video_path):
         try:
-            # Use cmd.exe through WSL to open the file in Windows
-            windows_path_escaped = windows_path.replace('/', '\\')
-            cmd = f'cmd.exe /C start "" "{windows_path_escaped}"'
-            subprocess.run(['wslpath', '-w', wsl_path], check=True, capture_output=True, text=True)
-            subprocess.run(cmd, shell=True)
-            return jsonify({"status": "opened", "path": windows_path})
-        except subprocess.CalledProcessError as e:
+            # Open the video file using the system's default player
+            os.startfile(abs_video_path)
+            return jsonify({"status": "opened", "path": abs_video_path})
+        except Exception as e:
             return jsonify({"error": f"Error opening video: {str(e)}"}), 500
     else:
         return jsonify({"error": "Video file not found"}), 404
+
+@app.route('/api/video/<int:video_id>', methods=['PUT'])
+def update_video_details(video_id):
+    data = request.get_json()
+    new_filename = data.get('filename')
+    new_tags = data.get('tags', [])
+
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        # Update filename
+        if new_filename:
+            cursor.execute("UPDATE videos SET file_name = ? WHERE id = ?", (new_filename, video_id))
+
+        # Update tags
+        cursor.execute("DELETE FROM tags WHERE video_id = ?", (video_id,))
+        for tag in new_tags:
+            cursor.execute(
+                "INSERT INTO tags (video_id, tag, confidence) VALUES (?, ?, ?)",
+                (video_id, tag, 1.0)
+            )
+
+        db.commit()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
 
 @app.route('/api/video/<int:video_id>/tags', methods=['POST'])
 def update_tags(video_id):
@@ -193,6 +210,70 @@ def update_tags(video_id):
     finally:
         db.close()
 
+@app.route('/api/video/<int:video_id>', methods=['DELETE'])
+def delete_video(video_id):
+    db = get_db()
+    cursor = db.cursor()
+    
+    try:
+        # Delete associated tags
+        cursor.execute("DELETE FROM tags WHERE video_id = ?", (video_id,))
+        
+        # Delete the video
+        cursor.execute("DELETE FROM videos WHERE id = ?", (video_id,))
+        
+        db.commit()
+        return jsonify({"status": "success", "message": "Video deleted"})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/video/<int:video_id>/rename', methods=['POST'])
+def rename_video_file(video_id):
+    data = request.get_json()
+    new_filename = data.get('new_filename')
+
+    if not new_filename:
+        return jsonify({"error": "New filename not provided"}), 400
+
+    db = get_db()
+    cursor = db.cursor()
+
+    try:
+        # Get the current file path
+        cursor.execute("SELECT file_path FROM videos WHERE id = ?", (video_id,))
+        video = cursor.fetchone()
+        if not video:
+            return jsonify({"error": "Video not found"}), 404
+
+        current_path = os.path.join(VIDEO_BASE_PATH, video['file_path'])
+        current_dir = os.path.dirname(current_path)
+        new_path = os.path.join(current_dir, new_filename)
+
+        # Rename the file
+        os.rename(current_path, new_path)
+
+        # Update the database
+        new_relative_path = os.path.relpath(new_path, VIDEO_BASE_PATH)
+        cursor.execute("UPDATE videos SET file_name = ?, file_path = ? WHERE id = ?", (new_filename, new_relative_path, video_id))
+        db.commit()
+
+        return jsonify({"status": "success", "new_path": new_relative_path})
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
 if __name__ == '__main__':
+    if not VIDEO_BASE_PATH or not os.path.isdir(VIDEO_BASE_PATH):
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("!!! WARNING: VIDEO_BASE_PATH is not set or not a directory. !!!")
+        print("!!! You will not be able to open videos.                    !!!")
+        print("!!! Set the VIDEO_BASE_PATH environment variable to the     !!!")
+        print("!!! absolute path of your video directory.                  !!!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     # Bind to 0.0.0.0 so the Flask dev server is reachable from outside the container
     app.run(host='0.0.0.0', debug=True, port=5000)

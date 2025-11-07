@@ -1,10 +1,10 @@
-# Use NVIDIA CUDA base image
-# syntax=docker/dockerfile:1.4
-FROM nvidia/cuda:12.0.1-base-ubuntu22.04
+# Development Dockerfile
+# Only installs dependencies, source code is bind-mounted
 
-# Set environment variables
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+# Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -12,38 +12,46 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-dev \
     ffmpeg \
+    git \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Set Python 3.10 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Install PyTorch with CUDA support FIRST (this is the big download)
+# This layer will be cached unless requirements change
+RUN pip install --no-cache-dir \
+    torch==2.1.0 \
+    torchvision==0.16.0 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# Install other Python dependencies
+# Separate layer for faster rebuilds if only these change
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Optional: Pre-install Whisper
+RUN pip install --no-cache-dir openai-whisper
+
+# Create app directory (but don't copy code - it's bind-mounted)
 WORKDIR /app
 
-# Install Python dependencies
-COPY requirements.txt .
+# Create directories for caches and data
+RUN mkdir -p /root/.cache/huggingface /root/.cache/whisper /data /videos
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install --upgrade pip setuptools wheel && \
-    pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    CUDA_VISIBLE_DEVICES=0 \
+    TRANSFORMERS_CACHE=/root/.cache/huggingface \
+    HF_HOME=/root/.cache/huggingface \
+    WHISPER_CACHE=/root/.cache/whisper
 
-# Install other dependencies
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install -r requirements.txt
+# Verify GPU is available
+RUN python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')" || true
 
-# Copy application code
-COPY . .
-
-# Create directories for data persistence
-RUN mkdir -p /app/data/thumbnails /app/data/cache
-
-# Expose port for Flask
-EXPOSE 5000
-
-# Add entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
-    && chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Set the entrypoint (use absolute path to avoid PATH lookup issues)
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-
-# Default command (can be overridden)
-CMD ["serve"]
+# Default command for development
+CMD ["/bin/bash"]

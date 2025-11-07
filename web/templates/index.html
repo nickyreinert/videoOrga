@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Browser</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -23,10 +24,17 @@
                         <h5 class="mb-0">Filters</h5>
                     </div>
                     <div class="card-body">
-                        <!-- Search -->
                         <div class="mb-3">
                             <label for="search" class="form-label">Search</label>
-                            <input type="text" class="form-control" id="search" placeholder="Search videos...">
+                            <div class="input-group">
+                                <input type="text" id="search" class="form-control" placeholder="Search videos...">
+                            </div>
+                        </div>
+
+                        <!-- View Switch -->
+                        <div class="form-check form-switch ms-3">
+                            <input class="form-check-input" type="checkbox" id="viewSwitch">
+                            <label class="form-check-label" for="viewSwitch">List View</label>
                         </div>
 
                         <!-- Date Range -->
@@ -47,79 +55,61 @@
 
             <!-- Video Grid -->
             <div class="col-md-9">
-                <div class="row row-cols-1 row-cols-md-3 g-4" id="video-grid">
-                    {% for video in videos %}
-                    <div class="col video-item" data-tags="{{ video.tags|tojson|safe }}">
-                        <div class="card h-100">
-                            {% if video.thumbnail_data %}
-                            <img src="data:image/jpeg;base64,{{ video.thumbnail_data }}" 
-                                 class="card-img-top" alt="Thumbnail">
-                            {% else %}
-                            <div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 200px;">
-                                No Thumbnail
-                            </div>
-                            {% endif %}
-                            <div class="card-body">
-                                <h5 class="card-title text-truncate" title="{{ video.filename }}">
-                                    {{ video.filename }}
-                                </h5>
-                                <p class="card-text">
-                                    <small class="text-muted">
-                                        {{ video.friendly_date }} • {{ video.friendly_duration }}
-                                    </small>
-                                </p>
-                                <div class="tags mb-2">
-                                    {% for tag in video.tags %}
-                                    <span class="badge bg-primary me-1">{{ tag }}</span>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            <div class="card-footer">
-                                {% if video.file_exists %}
-                                <button class="btn btn-primary btn-sm" 
-                                        onclick="openVideo('{{ video.file_path }}')">
-                                    Open Video
-                                </button>
-                                <button class="btn btn-secondary btn-sm" 
-                                        onclick="editTags({{ video.id }}, {{ video.tags|tojson|safe }})">
-                                    Edit Tags
-                                </button>
-                                {% else %}
-                                <button class="btn btn-danger btn-sm" disabled>
-                                    File Not Found
-                                </button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
+    <div id="video-grid" class="row row-cols-1 row-cols-md-4 g-4"></div>
+
+    <nav aria-label="Page navigation">
+        <ul id="pagination" class="pagination justify-content-center mt-4"></ul>
+    </nav>
             </div>
         </div>
     </div>
 
-    <!-- Tag Edit Modal -->
-    <div class="modal fade" id="tagEditModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Edit Tags</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="text" class="form-control" id="tagInput" 
-                           placeholder="Add tags (comma-separated)">
-                    <div id="currentTags" class="mt-3"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" onclick="saveTags()">Save Changes</button>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+    <!-- Video Detail Modal -->
+    <div class="modal fade" id="videoDetailModal" tabindex="-1" aria-labelledby="videoDetailModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="videoDetailModalLabel">Video Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <img id="videoDetailThumbnail" src="" class="img-fluid" alt="Thumbnail">
+                        </div>
+                        <div class="col-md-6">
+                            <form id="videoDetailForm">
+                                <input type="hidden" id="videoDetailId">
+                                <input type="hidden" id="videoDetailFilePath">
+                                <div class="mb-3">
+                                    <label for="videoDetailFilename" class="form-label">Filename</label>
+                                    <input type="text" class="form-control" id="videoDetailFilename">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="videoDetailCreationDate" class="form-label">Creation Date</label>
+                                    <input type="text" class="form-control" id="videoDetailCreationDate" disabled>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="videoDetailTags" class="form-label">Tags</label>
+                                    <input type="text" class="form-control" id="videoDetailTags">
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" onclick="deleteVideoFromModal()">Delete</button>
+                    <button type="button" class="btn btn-warning" onclick="renameVideo()">Rename</button>
+                    <button type="button" class="btn btn-primary" onclick="playVideoFromModal()">Play</button>
+                    <button type="button" class="btn btn-secondary" onclick="saveVideoDetails()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

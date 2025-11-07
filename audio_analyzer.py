@@ -186,9 +186,14 @@ class AudioAnalyzer:
                 _, probs = self.whisper_model.detect_language(mel)
                 detected_lang = max(probs, key=probs.get)
                 
-                # If detected language is allowed, use it. Otherwise, use the first one as default.
-                transcribe_language = detected_lang if detected_lang in allowed_languages else allowed_languages[0]
-                print(f"  Detected '{detected_lang}', transcribing with '{transcribe_language}'")
+                # If detected language is in the allowed list, use it.
+                # Otherwise, let Whisper auto-detect by passing None.
+                if detected_lang in allowed_languages:
+                    transcribe_language = detected_lang
+                    print(f"  Detected '{detected_lang}', transcribing with '{transcribe_language}'")
+                else:
+                    transcribe_language = None
+                    print(f"  Detected '{detected_lang}', but it's not in the allowed list {allowed_languages}. Letting Whisper auto-detect.")
             elif self.language and ',' in self.language and self.no_pre_detect:
                 # Use the first language from the list without pre-detection
                 transcribe_language = self.language.split(',')[0].strip()

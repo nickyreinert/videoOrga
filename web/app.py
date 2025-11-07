@@ -10,6 +10,7 @@ from functools import lru_cache
 import mmap
 import logging
 import subprocess
+import re
 
 # --- Database Setup ---
 DATABASE = os.environ.get('VIDEO_DB_PATH', './data/video_metadata.db')
@@ -166,9 +167,17 @@ def stream_video(video_id):
 
     range_header = request.headers.get('Range', None)
     size = os.path.getsize(video_path)
-    byte1, byte2 = 0, None
 
-    if range_header:
+    if not range_header:
+        # If no range header, send the whole file
+        def generate_full():
+            with open(video_path, 'rb') as f:
+                yield from f
+        return Response(generate_full(), mimetype="video/mp4", headers={"Content-Length": str(size)})
+
+    # Handle range request
+    byte1, byte2 = 0, None
+    try:
         match = re.search(r'(\d+)-(\d*)', range_header)
         groups = match.groups()
 
@@ -176,22 +185,27 @@ def stream_video(video_id):
             byte1 = int(groups[0])
         if groups[1]:
             byte2 = int(groups[1])
+    except (AttributeError, IndexError):
+        return "Invalid Range header", 400
 
-    if byte2 is None:
+    if byte2 is None or byte2 >= size:
         byte2 = size - 1
 
     length = byte2 - byte1 + 1
     
-    def generate():
+    def generate_partial():
+        """Generator to stream a chunk of the file."""
         with open(video_path, 'rb') as f:
             f.seek(byte1)
-            while True:
-                chunk = f.read(min(length, 65536))
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(remaining, 65536)) # Read in 64KB chunks
                 if not chunk:
                     break
                 yield chunk
+                remaining -= len(chunk)
 
-    rv = Response(generate(), 206, mimetype="video/mp4", direct_passthrough=True)
+    rv = Response(generate_partial(), 206, mimetype="video/mp4")
     rv.headers.add('Content-Range', f'bytes {byte1}-{byte2}/{size}')
     rv.headers.add('Accept-Ranges', 'bytes')
     rv.headers.add('Content-Length', str(length))

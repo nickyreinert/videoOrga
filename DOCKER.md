@@ -26,6 +26,8 @@ docker compose run --rm video-tagger process "/videos/test.MP4" --audio --force
 
 docker compose run --rm video-tagger process "/videos/1997/"  --audio --force --recursive
 
+docker compose run --rm video-tagger process "/videos/1997/"  --audio --force --language=de 
+
 # Check GPU status
 docker exec video-tagger nvidia-smi
 

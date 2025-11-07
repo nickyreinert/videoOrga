@@ -7,7 +7,6 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      # >>> NEW: Bind mount source code for live editing <<<
       - type: bind
         source: ./
         target: /app

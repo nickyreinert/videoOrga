@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 import torch
 
+from tqdm import tqdm
 
 class AudioAnalyzer:
     """Analyzes audio from videos: transcription and summarization"""
@@ -17,7 +18,8 @@ class AudioAnalyzer:
     def __init__(self, 
                  whisper_model: str = "base",
                  device: str = "auto",
-                 language: str = None):
+                 language: str = None,
+                 no_pre_detect: bool = False):
         """
         Initialize audio analyzer
         
@@ -30,9 +32,11 @@ class AudioAnalyzer:
                           large: best quality (~10GB VRAM)
             device: Device to run on ('cuda', 'cpu', or 'auto')
             language: Language code (e.g., 'en', 'de', 'es') or None for auto-detect
+            no_pre_detect: Disable language pre-detection when multiple languages are given
         """
         self.whisper_model_name = whisper_model
         self.language = language
+        self.no_pre_detect = no_pre_detect
         self.device = self._setup_device(device)
         self.whisper_model = None
         self.summarizer = None
@@ -90,8 +94,7 @@ class AudioAnalyzer:
             self.summarizer = pipeline(
                 "summarization",
                 model=model_name,
-                device=0 if self.device == "cuda" else -1,
-                dtype=torch.float16 if self.device == "cuda" else torch.float32
+                device=0 if self.device == "cuda" else -1
             )
             
             print("Summarization model loaded successfully")
@@ -168,17 +171,36 @@ class AudioAnalyzer:
         """
         self.load_whisper()
         
-        print(f"Transcribing audio...")
-        
         try:
-            # Transcribe with Whisper
+            # If a list of languages is provided, perform pre-detection
+            transcribe_language = self.language
+            if self.language and ',' in self.language and not self.no_pre_detect:
+                allowed_languages = [lang.strip() for lang in self.language.split(',')]
+                print(f"  Pre-detecting language within: {allowed_languages}...")
+                
+                # Load the audio and detect the language
+                import whisper
+                audio = whisper.load_audio(audio_path)
+                audio = whisper.pad_or_trim(audio)
+                mel = whisper.log_mel_spectrogram(audio).to(self.whisper_model.device)
+                _, probs = self.whisper_model.detect_language(mel)
+                detected_lang = max(probs, key=probs.get)
+                
+                # If detected language is allowed, use it. Otherwise, use the first one as default.
+                transcribe_language = detected_lang if detected_lang in allowed_languages else allowed_languages[0]
+                print(f"  Detected '{detected_lang}', transcribing with '{transcribe_language}'")
+            elif self.language and ',' in self.language and self.no_pre_detect:
+                # Use the first language from the list without pre-detection
+                transcribe_language = self.language.split(',')[0].strip()
+                print(f"  Pre-detection disabled, using first language: '{transcribe_language}'")
+
+            print(f"Transcribing audio...")
+            # Let Whisper manage the progress bar by setting verbose=None.
+            # This uses tqdm if it's installed and is more reliable than a custom callback.
             result = self.whisper_model.transcribe(
-                audio_path,
-                language=self.language,
-                task='transcribe',
-                fp16=(self.device == 'cuda')  # Use FP16 on GPU for speed
+                audio_path, language=transcribe_language, fp16=(self.device == 'cuda'),
+                verbose=None
             )
-            
             # Extract text and metadata
             text = result['text'].strip()
             language = result.get('language', 'unknown')
@@ -235,23 +257,18 @@ class AudioAnalyzer:
             
             print("Generating summary...")
             
-            # Truncate input if too long (model limit is usually ~1024 tokens)
-            max_input_length = 1024
-            words = text.split()
-            if len(words) > max_input_length:
-                text = " ".join(words[:max_input_length])
-            
             # Calculate appropriate max_length if not provided
             input_length = len(text.split())
             if max_length is None:
                 max_length = max(min_length, input_length // 2)  # Target 50% reduction
             
-            # Generate summary
+            # Generate summary, letting the pipeline handle truncation
             summary = self.summarizer(
                 text,
                 max_length=max_length,
                 min_length=min_length,
-                do_sample=False
+                do_sample=False,
+                truncation=True  # Ensure input is truncated to model's max length
             )
             
             summary_text = summary[0]['summary_text']

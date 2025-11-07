@@ -6,6 +6,16 @@ let sortState = { key: 'creation_date', order: 'desc' };
 let currentPage = 1;
 let itemsPerPage = 12;
 
+// Debounce function to limit how often a function can run
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM fully loaded and parsed');
@@ -41,7 +51,7 @@ async function loadTags() {
         
         const tagCloud = document.getElementById('tag-cloud');
         tagCloud.innerHTML = tags.map(tag => `
-            <span class="tag" onclick="toggleTag('${tag.tag_name}')">
+            <span class="tag ${selectedTags.includes(tag.tag_name) ? 'selected' : ''}" onclick="toggleTag('${tag.tag_name}')">
                 ${tag.tag_name} (${tag.count})
             </span>
         `).join('');
@@ -59,10 +69,10 @@ function toggleTag(tagName) {
         selectedTags.splice(index, 1);
     }
     
-    // Update UI
-    document.querySelectorAll('.tag').forEach(tag => {
-        if (tag.textContent.startsWith(tagName + ' ')) {
-            tag.classList.toggle('selected', selectedTags.includes(tagName));
+    // Update UI to reflect selected tags
+    document.querySelectorAll('.tag').forEach(tagSpan => {
+        if (tagSpan.textContent.startsWith(tagName + ' ')) { // Match by tag name
+            tagSpan.classList.toggle('selected', selectedTags.includes(tagName));
         }
     });
     
@@ -82,12 +92,9 @@ async function filterVideos() {
     if (endDate) params.append('end_date', endDate);
     selectedTags.forEach(tag => params.append('tags', tag));
     
-    console.log('Fetching videos with params:', params.toString());
     try {
         const response = await fetch(`/api/videos?${params.toString()}`);
-        console.log('Response from server:', response);
         videos = await response.json();
-        console.log('Videos data:', videos);
         currentPage = 1; // Reset to first page
         renderPage();
     } catch (error) {
@@ -100,11 +107,12 @@ function updateVideoGrid() {
     const paginatedVideos = videos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     grid.innerHTML = paginatedVideos.map(video => {
-        const thumbnails = video.thumbnail_data || [];
+        const videoCopy = JSON.parse(JSON.stringify(video));
+        const thumbnails = videoCopy.thumbnail_data || [];
         const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
 
         return `
-        <div class="col video-item" data-tags='${JSON.stringify(video.tags)}' onclick='openVideoDetailModal(${JSON.stringify(video)})'>
+        <div class="col video-item" data-tags='${JSON.stringify(videoCopy.tags)}' onclick='openVideoDetailModal(${JSON.stringify(videoCopy)})'>
             <div class="card h-100">
                 ${firstThumbnail
                     ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
@@ -119,27 +127,31 @@ function updateVideoGrid() {
                        </div>`
                 }
                 <div class="card-body">
-                    <h5 class="card-title text-truncate" title="${video.filename}">
-                        ${video.filename}
+                    <h5 class="card-title text-truncate" title="${videoCopy.file_name}">
+                        ${videoCopy.file_name}
                     </h5>
                     <p class="card-text">
                         <small class="text-muted">
-                            ${new Date(video.creation_date).toLocaleDateString()}
+                            ${new Date(videoCopy.parsed_datetime || videoCopy.file_created_date).toLocaleDateString()}
                         </small>
                     </p>
                     <div class="tags mb-2">
-                        ${(video.tags || []).map(tag => 
+                        ${(videoCopy.tags || []).map(tag => 
                             `<span class="badge bg-primary me-1">${tag}</span>`
                         ).join('')}
                     </div>
                 </div>
                 <div class="card-footer">
                     <button class="btn btn-primary btn-sm" 
-                            onclick="openVideo('${video.file_path}')">
+                            onclick="openVideo(${videoCopy.id})">
                         Open Video
                     </button>
+                    <button class="btn btn-secondary btn-sm" 
+                            onclick="openVideoDetailModal(${JSON.stringify(videoCopy)})">
+                        Edit Tags
+                    </button>
                     <button class="btn btn-danger btn-sm" 
-                            onclick="deleteVideo(${video.id})">
+                            onclick="deleteVideo(${videoCopy.id})">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -165,8 +177,8 @@ function renderListView() {
             <tbody>
                 ${paginatedVideos.map(video => `
                     <tr>
-                        <td>${video.filename}</td>
-                        <td>${new Date(video.creation_date).toLocaleDateString()}</td>
+                        <td>${video.file_name}</td>
+                        <td>${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</td>
                         <td>
                             ${(video.tags || []).map(tag => `<span class="badge bg-primary me-1">${tag}</span>`).join('')}
                         </td>
@@ -244,135 +256,14 @@ function changePage(page) {
 }
 
 // Open video in system player or stream
-function openVideo(path) {
-    fetch(`/video/${path}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                alert('Error: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error opening video:', error);
-            alert('Error opening video');
-        });
-}
-
-// Delete a video
-async function deleteVideo(videoId) {
-    if (!confirm('Are you sure you want to delete this video?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/video/${videoId}`, {
-            method: 'DELETE'
-        });
-
-        if (response.ok) {
-            // Refresh the video grid
-            filterVideos();
-        } else {
-            alert('Error deleting video');
-        }
-    } catch (error) {
-        console.error('Error deleting video:', error);
-        alert('Error deleting video');
-    }
-}
-
-// Utility function to debounce filter calls
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
-// Start cycling through thumbnails on hover
-function startThumbnailCycle(img) {
-    const thumbnails = JSON.parse(img.dataset.thumbnails);
-    if (thumbnails.length <= 1) {
-        return;
-    }
-
-    let currentIndex = 0;
-    img.dataset.thumbnailIndex = currentIndex;
-
-    const intervalId = setInterval(() => {
-        currentIndex = (currentIndex + 1) % thumbnails.length;
-        img.src = `data:image/jpeg;base64,${thumbnails[currentIndex]}`;
-        img.dataset.thumbnailIndex = currentIndex;
-    }, 800); // Change thumbnail every 800ms
-
-    img.dataset.intervalId = intervalId;
-}
-
-// Stop cycling through thumbnails and reset to the first one
-function stopThumbnailCycle(img) {
-    clearInterval(img.dataset.intervalId);
-    const thumbnails = JSON.parse(img.dataset.thumbnails);
-    img.src = `data:image/jpeg;base64,${thumbnails[0]}`;
-    img.dataset.thumbnailIndex = 0;
-}
-
-// Open the video detail modal
-function openVideoDetailModal(video) {
-    currentVideoId = video.id;
-    document.getElementById('videoDetailId').value = video.id;
-    document.getElementById('videoDetailFilePath').value = video.file_path;
-    document.getElementById('videoDetailFilename').value = video.filename;
-    document.getElementById('videoDetailCreationDate').value = new Date(video.creation_date).toLocaleString();
-    document.getElementById('videoDetailTags').value = (video.tags || []).join(', ');
-    
-    const thumbnail = document.getElementById('videoDetailThumbnail');
-    const firstThumbnail = (video.thumbnail_data && video.thumbnail_data.length > 0) ? video.thumbnail_data[0] : '';
-    if (firstThumbnail) {
-        thumbnail.src = `data:image/jpeg;base64,${firstThumbnail}`;
-    } else {
-        thumbnail.src = '';
-    }
-
-    const modal = new bootstrap.Modal(document.getElementById('videoDetailModal'));
-    modal.show();
-}
-
-// Save video details from the modal
-async function saveVideoDetails() {
-    const videoId = document.getElementById('videoDetailId').value;
-    const filename = document.getElementById('videoDetailFilename').value;
-    const tags = document.getElementById('videoDetailTags').value.split(',').map(tag => tag.trim());
-
-    try {
-        const response = await fetch(`/api/video/${videoId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ filename: filename, tags: tags })
-        });
-
-        if (response.ok) {
-            filterVideos();
-            bootstrap.Modal.getInstance(document.getElementById('videoDetailModal')).hide();
-        } else {
-            alert('Error saving video details');
-        }
-    } catch (error) {
-        console.error('Error saving video details:', error);
-        alert('Error saving video details');
-    }
+function openVideo(videoId) {
+    window.open(`/video/stream/${videoId}`, '_blank');
 }
 
 // Play video from the modal
 function playVideoFromModal() {
-    const filePath = document.getElementById('videoDetailFilePath').value;
-    openVideo(filePath);
+    const videoId = document.getElementById('videoDetailId').value;
+    openVideo(videoId);
 }
 
 
@@ -410,5 +301,101 @@ async function renameVideo() {
     } catch (error) {
         console.error('Error renaming video:', error);
         alert('Error renaming video');
+    }
+}
+
+// Open the video detail modal and populate it with data
+function openVideoDetailModal(video) {
+    currentVideoId = video.id;
+
+    // Populate modal fields
+    document.getElementById('videoDetailId').value = video.id;
+    document.getElementById('videoDetailFilePath').value = video.file_path;
+    document.getElementById('videoDetailFilename').value = video.file_name;
+    document.getElementById('videoDetailCreationDate').value = new Date(video.parsed_datetime || video.file_created_date).toLocaleString();
+    
+    // Handle tags
+    const tags = video.tags || [];
+    document.getElementById('videoDetailTags').value = tags.join(', ');
+
+    // Handle transcript
+    const transcriptText = video.transcript || 'No transcript available.';
+    document.getElementById('videoDetailTranscript').value = transcriptText;
+
+    // Handle thumbnail
+    const thumbnailData = video.thumbnail_data || [];
+    const thumbnailElement = document.getElementById('videoDetailThumbnail');
+    if (thumbnailData.length > 0) {
+        thumbnailElement.src = `data:image/jpeg;base64,${thumbnailData[0]}`;
+    } else {
+        thumbnailElement.src = ''; // Or a placeholder image
+    }
+
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('videoDetailModal'));
+    modal.show();
+}
+
+// Save changes from the video detail modal
+async function saveVideoDetails() {
+    const videoId = document.getElementById('videoDetailId').value;
+    const tags = document.getElementById('videoDetailTags').value.split(',')
+        .map(tag => tag.trim()).filter(tag => tag);
+
+    try {
+        const response = await fetch(`/api/video/${videoId}/tags`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ tags: tags })
+        });
+
+        if (response.ok) {
+            // Hide the modal
+            const modalInstance = bootstrap.Modal.getInstance(document.getElementById('videoDetailModal'));
+            modalInstance.hide();
+
+            // Refresh video grid and tags
+            await filterVideos();
+            await loadTags();
+        } else {
+            const errorData = await response.json();
+            alert(`Error saving tags: ${errorData.error}`);
+        }
+    } catch (error) {
+        console.error('Error saving video details:', error);
+        alert('An error occurred while saving. Please check the console.');
+    }
+}
+
+// Start cycling through thumbnails on mouse enter
+function startThumbnailCycle(element) {
+    const thumbnails = JSON.parse(element.dataset.thumbnails || '[]');
+    if (thumbnails.length <= 1) {
+        return; // No need to cycle
+    }
+
+    let currentIndex = 0;
+    const intervalId = setInterval(() => {
+        currentIndex = (currentIndex + 1) % thumbnails.length;
+        element.src = `data:image/jpeg;base64,${thumbnails[currentIndex]}`;
+    }, 800); // Change image every 800ms
+
+    // Store interval ID on the element to clear it later
+    element.dataset.cycleIntervalId = intervalId;
+}
+
+// Stop cycling through thumbnails on mouse leave
+function stopThumbnailCycle(element) {
+    const intervalId = element.dataset.cycleIntervalId;
+    if (intervalId) {
+        clearInterval(intervalId);
+        delete element.dataset.cycleIntervalId;
+        // Reset to the first thumbnail
+        const thumbnails = JSON.parse(element.dataset.thumbnails || '[]');
+        if (thumbnails.length > 0) {
+            element.src = `data:image/jpeg;base64,${thumbnails[0]}`;
+        }
     }
 }

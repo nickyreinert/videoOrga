@@ -6,6 +6,7 @@ Processes videos, extracts frames, analyzes with AI, and stores in SQLite databa
 import os
 import argparse
 from pathlib import Path
+import warnings
 from datetime import datetime
 from typing import List, Dict
 
@@ -24,7 +25,9 @@ class VideoTagger:
                  model_name: str = "blip",
                  db_path: str = None,
                  enable_audio: bool = False,
-                 whisper_model: str = "base"):
+                 whisper_model: str = "base",
+                 language: str = None,
+                 no_pre_detect: bool = False):
         """
         Initialize video tagger with SQLite backend
         
@@ -34,6 +37,8 @@ class VideoTagger:
             db_path: Path to SQLite database (default: video_archive.db in current dir)
             enable_audio: Whether to transcribe and summarize audio
             whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
+            language: Language for transcription ('en', 'de', etc.) or None for auto-detect
+            no_pre_detect: Disable language pre-detection when multiple languages are given
         """
         self.extractor = FrameExtractor(num_frames=num_frames)
         self.analyzer = AIAnalyzer(model_name=model_name)
@@ -43,7 +48,9 @@ class VideoTagger:
         if enable_audio:
             self.audio_analyzer = AudioAnalyzer(
                 whisper_model=whisper_model,
-                device="auto"
+                device="auto",
+                language=language,
+                no_pre_detect=no_pre_detect
             )
         else:
             self.audio_analyzer = None
@@ -56,6 +63,8 @@ class VideoTagger:
         print(f"Using database: {self.db.db_path}")
         if enable_audio:
             print(f"Audio transcription: ENABLED (Whisper {whisper_model})")
+            if language:
+                print(f"Language forced to: {language.upper()}")
     
     def process_video(self, video_path: str, force: bool = False) -> Dict:
         """
@@ -191,13 +200,14 @@ class VideoTagger:
         
         return result
     
-    def process_directory(self, directory: str, recursive: bool = False):
+    def process_directory(self, directory: str, recursive: bool = False, force: bool = False):
         """
         Process all videos in a directory
         
         Args:
             directory: Directory path
             recursive: Search subdirectories
+            force: Force reprocessing of all videos
         """
         video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'}
         
@@ -223,7 +233,7 @@ class VideoTagger:
             print(f"{'='*60}")
             
             try:
-                result = self.process_video(str(video_file))
+                result = self.process_video(str(video_file), force=force)
                 if result:
                     successful += 1
                 else:
@@ -295,6 +305,20 @@ class VideoTagger:
 
 def main():
     """Main entry point"""
+    # Suppress the specific UserWarning from PyTorch about TypedStorage
+    # This is a known issue in certain versions of torch/transformers and is safe to ignore
+    warnings.filterwarnings(
+        "ignore",
+        message="TypedStorage is deprecated"
+    )
+
+    # Suppress the FutureWarning from huggingface_hub about resume_download
+    warnings.filterwarnings(
+        "ignore",
+        message="`resume_download` is deprecated",
+        category=FutureWarning
+    )
+
     parser = argparse.ArgumentParser(
         description="Automatically tag videos using AI and store in SQLite database",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -353,6 +377,17 @@ Examples:
         help='Whisper model size for transcription (default: base)'
     )
     parser.add_argument(
+        '--language',
+        type=str,
+        default='de,en',
+        help='Force transcription language(s) (e.g., "en" or "de,en"). Skips auto-detection if one language is given, otherwise pre-detects within the list.'
+    )
+    parser.add_argument(
+        '--no-language-pre-detect',
+        action='store_true',
+        help='Disable pre-detection when multiple languages are provided. Uses the first language in the list.'
+    )
+    parser.add_argument(
         '--recursive',
         action='store_true',
         help='Process subdirectories recursively'
@@ -390,7 +425,9 @@ Examples:
         model_name=args.model,
         db_path=db_path,
         enable_audio=args.audio,
-        whisper_model=args.whisper_model
+        whisper_model=args.whisper_model,
+        language=args.language,
+        no_pre_detect=args.no_language_pre_detect
     )
     
     try:
@@ -424,7 +461,7 @@ Examples:
             tagger.process_video(str(input_path), force=args.force)
         elif input_path.is_dir():
             # Process directory
-            tagger.process_directory(str(input_path), recursive=args.recursive)
+            tagger.process_directory(str(input_path), recursive=args.recursive, force=args.force)
         else:
             print(f"Error: {args.input} is not a valid file or directory")
             return

@@ -1,7 +1,10 @@
 #!/bin/bash
+#!/bin/bash
 set -e
 
 # Normalize environment and ensure script runs with LF line endings
+# Force tqdm to always display progress bars, even in non-TTY environments
+export TQDM_DISABLE=0
 export LC_ALL=C.UTF-8
 
 # Function to wait for GPU availability
@@ -45,7 +48,7 @@ case "$1" in
         else
             INPUT="/videos"
         fi
-        python3 video_tagger.py "$INPUT" --db /app/data/video_metadata.db --recursive "$@"
+        python3 video_tagger.py "$INPUT" --db /app/data/video_metadata.db "$@"
         ;;
     *)
         exec "$@"

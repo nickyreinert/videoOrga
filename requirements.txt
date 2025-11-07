@@ -1,7 +1,6 @@
 # Core dependencies
 opencv-python>=4.8.0
 pillow>=10.0.0
-numpy>=1.24.0
 
 # PyTorch (install separately with CUDA support)
 # See installation instructions in README.md
@@ -9,7 +8,7 @@ numpy>=1.24.0
 # torchvision>=0.15.0
 
 # Transformers and AI models
-transformers>=4.30.0
+transformers==4.36.2  # Pinned to a version compatible with torch 2.1.0
 accelerate>=0.20.0
 
 # Audio transcription

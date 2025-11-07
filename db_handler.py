@@ -440,6 +440,8 @@ class DatabaseHandler:
             ORDER BY thumbnail_index
         """, (video_id,))
         video_dict['thumbnails'] = [dict(row) for row in self.cursor.fetchall()]
+        video_dict['transcript'] = video_dict.get('transcript')
+        video_dict['transcript_summary'] = video_dict.get('transcript_summary')
         
         return video_dict
     

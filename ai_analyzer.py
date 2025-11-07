@@ -81,10 +81,11 @@ class AIAnalyzer:
             model_id = "Salesforce/blip-image-captioning-large"
             
             self.processor = BlipProcessor.from_pretrained(model_id, use_fast=True)
-            self.model = BlipForConditionalGeneration.from_pretrained(
-                model_id,
-                dtype=torch.float16 if self.device == "cuda" else torch.float32
-            ).to(self.device)
+            # Load model first, then move to device and set dtype
+            self.model = BlipForConditionalGeneration.from_pretrained(model_id)
+            self.model.to(self.device)
+            if self.device == "cuda":
+                self.model.half()  # Convert to float16 for GPU
             
             print("BLIP model loaded successfully")
             

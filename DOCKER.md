@@ -22,7 +22,9 @@ docker compose logs -f --tail=200
 docker compose run --rm video-tagger process --audio
 
 # Process a specific video with force flag
-docker compose run --rm video-tagger process --audio --force "/videos/test.MP4"
+docker compose run --rm video-tagger process "/videos/test.MP4" --audio --force 
+
+docker compose run --rm video-tagger process "/videos/1997/"  --audio --force --recursive
 
 # Check GPU status
 docker exec video-tagger nvidia-smi

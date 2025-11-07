@@ -108,11 +108,11 @@ function updateVideoGrid() {
 
     grid.innerHTML = paginatedVideos.map(video => {
         const videoCopy = JSON.parse(JSON.stringify(video));
-        const thumbnails = videoCopy.thumbnail_data || [];
+        const thumbnails = video.thumbnail_data || [];
         const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
 
         return `
-        <div class="col video-item" data-tags='${JSON.stringify(videoCopy.tags)}' onclick='openVideoDetailModal(${JSON.stringify(videoCopy)})'>
+        <div class="col video-item" data-tags='${JSON.stringify(video.tags)}'>
             <div class="card h-100">
                 ${firstThumbnail
                     ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
@@ -126,28 +126,28 @@ function updateVideoGrid() {
                            No Thumbnail
                        </div>`
                 }
-                <div class="card-body">
-                    <h5 class="card-title text-truncate" title="${videoCopy.file_name}">
-                        ${videoCopy.file_name}
+                <div class="card-body" onclick='openVideoDetailModal(${video.id})'>
+                    <h5 class="card-title text-truncate" title="${video.file_name}">
+                        ${video.file_name}
                     </h5>
                     <p class="card-text">
                         <small class="text-muted">
-                            ${new Date(videoCopy.parsed_datetime || videoCopy.file_created_date).toLocaleDateString()}
+                            ${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}
                         </small>
                     </p>
                     <div class="tags mb-2">
-                        ${(videoCopy.tags || []).map(tag => 
+                        ${(video.tags || []).map(tag => 
                             `<span class="badge bg-primary me-1">${tag}</span>`
                         ).join('')}
                     </div>
                 </div>
                 <div class="card-footer">
                     <button class="btn btn-primary btn-sm" 
-                            onclick="openVideo(${videoCopy.id})">
+                            onclick="openVideo(${video.id})">
                         Open Video
                     </button>
                     <button class="btn btn-secondary btn-sm" 
-                            onclick="openVideoDetailModal(${JSON.stringify(videoCopy)})">
+                            onclick="openVideoDetailModal(${video.id})">
                         Edit Tags
                     </button>
                     <button class="btn btn-danger btn-sm" 
@@ -184,7 +184,7 @@ function renderListView() {
                         </td>
                         <td>
                             <button class="btn btn-primary btn-sm" onclick="openVideo('${video.file_path}')">Open</button>
-                            <button class="btn btn-secondary btn-sm" onclick='openVideoDetailModal(${JSON.stringify(video)})'>Details</button>
+                            <button class="btn btn-secondary btn-sm" onclick='openVideoDetailModal(${video.id})'>Details</button>
                         </td>
                     </tr>
                 `).join('')}
@@ -305,8 +305,17 @@ async function renameVideo() {
 }
 
 // Open the video detail modal and populate it with data
-function openVideoDetailModal(video) {
-    currentVideoId = video.id;
+async function openVideoDetailModal(videoId) {
+    currentVideoId = videoId;
+
+    // Fetch full video details
+    const response = await fetch(`/api/video/${videoId}`);
+    if (!response.ok) {
+        console.error('Failed to fetch video details');
+        return;
+    }
+    const video = await response.json();
+
 
     // Populate modal fields
     document.getElementById('videoDetailId').value = video.id;

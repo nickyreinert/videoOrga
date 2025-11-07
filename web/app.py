@@ -95,6 +95,24 @@ def update_video_tags(video_id):
         return jsonify({"error": str(e)}), 500
 
 # --- End API Endpoints ---
+@app.route('/api/video/<int:video_id>', methods=['GET'])
+def get_video_details(video_id):
+    """Get full details for a single video."""
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+    video = cursor.fetchone()
+    if not video:
+        return jsonify({"error": "Video not found"}), 404
+
+    video_dict = dict(video)
+    cursor.execute("SELECT tag FROM tags WHERE video_id = ?", (video_id,))
+    video_dict['tags'] = [row['tag'] for row in cursor.fetchall()]
+    
+    cursor.execute("SELECT image_data FROM thumbnails WHERE video_id = ? ORDER BY thumbnail_index", (video_id,))
+    video_dict['thumbnail_data'] = [row['image_data'] for row in cursor.fetchall()]
+    db.close()
+    return jsonify(video_dict)
 
 @app.route('/video/stream/<int:video_id>')
 def stream_video(video_id):

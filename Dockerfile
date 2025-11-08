@@ -28,22 +28,27 @@ RUN pip install --no-cache-dir --upgrade pip
 # This layer will be cached unless requirements change
 # CRITICAL: DO NOT CHANGE VERSIONS HERE, THEY DEPEND ON EACH OTHER AND THE CUDA VERSION DEFINED ABOVE
 # RUN pip install --no-cache-dir torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu118
-RUN if [ ! -f /torch-cache/torch-2.1.0+cu118-cp310-cp310-linux_x86_64.whl ]; then \
-      mkdir -p /torch-cache && \
-      pip download torch==2.1.0+cu118 torchvision==0.16.0+cu118 \
-        --index-url https://download.pytorch.org/whl/cu118 -d /torch-cache; \
-    fi
-    
-RUN pip install --no-index --find-links=/torch-cache torch torchvision
+
+# keept this for testing 
+RUN wget https://www.google.com/robots.txt -O /torch-cache/test-download.txt
+
+
+# RUN if [ ! -f /cache/torch-2.1.0%2Bcu118-cp310-cp310-linux_x86_64.whl ]; then \
+#      pip download torch==2.1.0+cu118 torchvision==0.16.0+cu118 \
+#        --index-url https://download.pytorch.org/whl/cu118 -d /torch-cache; \
+#    fi
+
+# no-clean prevents pip from deleting build dependencies, speeding up subsequent installs    
+RUN pip install --no-index --find-links=/cache --no-clean torch torchvision
 
 # Create directories for caches and data
-RUN mkdir -p /root/.cache/huggingface /root/.cache/whisper /data /videos
+RUN mkdir -p /cache/huggingface /cache/whisper
 
 # Set environment variables   
 ENV PYTHONUNBUFFERED=1 \
     CUDA_VISIBLE_DEVICES=0 \
-    HF_HOME=/root/.cache/huggingface \
-    WHISPER_CACHE=/root/.cache/whisper
+    HF_HOME=/cache/huggingface \
+    WHISPER_CACHE=/cache/whisper
 
 # --- COPY local files AFTER large installs ---
 

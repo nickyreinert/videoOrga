@@ -94,19 +94,19 @@ video-auto-tagger/
 ├── DEV-GUIDE.md              # This file
 ├── README.md                 # User documentation
 ├── requirements.txt          # Python dependencies
-├── setup.py                  # Installation script
-├── config.yaml               # Configuration file
-├── src/
-│   ├── __init__.py
-│   ├── frame_extractor.py    # Video frame sampling ✓
-│   ├── ai_analyzer.py        # AI model integration
-│   ├── tag_manager.py        # Tag processing & storage ✓
-│   └── batch_processor.py    # Main processing pipeline
-├── models/                   # Local AI model cache
+├── config.json               # Configuration file for video processing
+├── frame_extractor.py        # Video frame sampling
+├── ai_analyzer.py            # AI model integration
+├── audio_analyzer.py         # Audio transcription
+├── db_handler                # AI model integration
+├── model-cache/              # Local AI model cache
+├── torch-cache/              # Local Torch cache
 ├── data/
-│   └── video_metadata.json   # Output metadata ✓
-└── tests/
-    └── test_extraction.py
+│   └── cache/
+│   └── thumbnails/
+│   └── video_metadata.db     # SQLite database 
+└── summary_test.py           # Test script for AI summary
+
 ```
 
 ## Current Progress

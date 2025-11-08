@@ -6,4 +6,6 @@ test.MP4
 __pycache__/
 *.sqlite3
 *.db
-model_cache/
+model-cache/
+torch-cache/
+cache/

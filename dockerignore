@@ -1,5 +1,5 @@
 torch-cache/
-model_cache/
+model-cache/
 
 # Git
 .git

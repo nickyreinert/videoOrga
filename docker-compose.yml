@@ -7,43 +7,35 @@ services:
     ports:
       - "5000:5000"
     volumes:
+      # Mount the application source code and data directories
       - type: bind
-        source: ./
+        source: ./app
         target: /app
-        # Exclude patterns to avoid conflicts
-      
+      - type: bind
+        source: ./data
+        target: /app/data
+
       # Mount video directory (read-only)
       - type: bind
         source: /e/OneDrive/Videos
         target: /videos
         read_only: true
-      
-      # Mount for persistent data (database, thumbnails, cache)
-      - type: bind
-        source: ./data
-        target: /app/data
-      
-      # Mount for model/cache files to avoid re-downloading large models
-      - type: bind
-        source: ./model_cache
-        target: /app/models
 
-      # Mount for model/cache files to avoid re-downloading large models
+      # Mount cache directory for model and torch caches         
       - type: bind
-        source: ./torch-cache
-        target: /torch-cache
+        source: ./cache
+        target: /cache
 
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - VIDEO_BASE_PATH=/videos
-      - FLASK_APP=web/app.py   # >>> NEW: Point to the Flask app location <<<
-      - FLASK_ENV=development  # Changed to development for auto-reload
-      - FLASK_DEBUG=1          # Enable debug mode for live reload
+      - VIDEO_DB_PATH=/app/data/video_metadata.db # Point DB to the correct mounted path
+      - FLASK_APP=web/app.py
       - PYTHONUNBUFFERED=1
       # Cache/config locations for transformers / torch / huggingface
-      - HF_HOME=/app/models/huggingface
-      - TORCH_HOME=/app/models/torch
-      - XDG_CACHE_HOME=/app/models/cache
+      - HF_HOME=/cache/huggingface
+      - TORCH_HOME=/cache/torch
+      - XDG_CACHE_HOME=/cache/other
     
     deploy:
       resources:
@@ -55,9 +47,5 @@ services:
     
     restart: unless-stopped
     
-    # >>> NEW: Override command to use Flask development server <<<
+    # Use Flask's development server with reload enabled
     command: python3 -m flask run --host=0.0.0.0 --reload
-
-volumes:
-  video_data:
-    # Named volume for persistent data

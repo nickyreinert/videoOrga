@@ -65,8 +65,8 @@ libffi-dev liblzma-dev tk-dev
 
 Then install **PyEnv**:
 ```
-curl https://pyenv.run  -o install.sh
-bash install.sh
+curl https://pyenv.run  -o install-pyenv.sh
+bash install-pyenv.sh
 ```
 
 Now install and activate Python 3.11.8:

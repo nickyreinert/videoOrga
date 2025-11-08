@@ -246,6 +246,227 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
         print(f"  Finished summarizing chunks. Combined length: {len(combined_summary)} chars.")
         return combined_summary
 
+
+
+    def generate_summary_and_tags_separately(summary_generator, visual_context, audio_transcript, language):
+        """
+        Generate summary and tags in two separate calls for better quality
+        
+        Args:
+            summary_generator: The HuggingFace pipeline
+            visual_context: Visual descriptions
+            audio_transcript: Audio transcript
+            language: Target language
+            
+        Returns:
+            Dictionary with 'summary' and 'tags'
+        """
+        
+        # Step 1: Generate summary
+        summary_prompt = f"""Summarize this video content in one paragraph in {language}.
+
+    Visual scenes: {visual_context}
+
+    Audio: {audio_transcript}
+
+    Summary:"""
+        
+        try:
+            summary_output = summary_generator(
+                summary_prompt,
+                max_length=200,
+                min_length=30,
+                do_sample=False,
+                truncation=True
+            )[0]['generated_text']
+            
+            # Clean up output (FLAN-T5 might repeat the prompt)
+            summary = summary_output.replace(summary_prompt, "").strip()
+            
+        except Exception as e:
+            print(f"Summary generation failed: {e}")
+            summary = ""
+        
+        # Step 2: Generate tags
+        tags_prompt = f"""List 10-15 relevant keywords for this video in {language}, separated by commas.
+
+    Content: {visual_context[:200]}
+
+    Keywords:"""
+        
+        try:
+            tags_output = summary_generator(
+                tags_prompt,
+                max_length=100,
+                do_sample=False,
+                truncation=True
+            )[0]['generated_text']
+            
+            # Clean up and parse tags
+            tags_text = tags_output.replace(tags_prompt, "").strip()
+            tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+            
+        except Exception as e:
+            print(f"Tag generation failed: {e}")
+            tags = []
+        
+        return {
+            'summary': summary,
+            'tags': tags
+        }
+
+    def parse_llm_output(output: str, fallback_summary: str = "", fallback_tags: list = None) -> dict:
+        """
+        Robustly parse LLM output even if format is imperfect
+        
+        Args:
+            output: Raw LLM output
+            fallback_summary: Use this if parsing fails
+            fallback_tags: Use these if parsing fails
+            
+        Returns:
+            Dictionary with 'summary' and 'tags'
+        """
+        import re
+        
+        if fallback_tags is None:
+            fallback_tags = []
+        
+        result = {
+            'summary': fallback_summary,
+            'tags': fallback_tags.copy()
+        }
+        
+        # Try multiple parsing strategies
+        
+        # Strategy 1: Look for "Summary:" and "Tags:" markers
+        summary_match = re.search(r"Summary:\s*(.+?)(?=Tags:|$)", output, re.DOTALL | re.IGNORECASE)
+        tags_match = re.search(r"Tags:\s*(.+?)$", output, re.DOTALL | re.IGNORECASE)
+        
+        if summary_match:
+            summary_text = summary_match.group(1).strip()
+            # Remove placeholder text
+            if '[' not in summary_text and 'here]' not in summary_text.lower():
+                result['summary'] = summary_text
+        
+        if tags_match:
+            tags_text = tags_match.group(1).strip()
+            # Remove placeholder text
+            if '[' not in tags_text and 'here]' not in tags_text.lower():
+                # Parse comma-separated tags
+                tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+                if tags and tags[0].lower() != 'your':  # Filter out "Your tags here"
+                    result['tags'] = tags
+        
+        # Strategy 2: If no markers found, treat first line as summary, rest as tags
+        if not result['summary'] and not result['tags']:
+            lines = [line.strip() for line in output.split('\n') if line.strip()]
+            if lines:
+                result['summary'] = lines[0]
+                if len(lines) > 1:
+                    # Try to parse remaining lines as tags
+                    tags_text = ' '.join(lines[1:])
+                    tags = [tag.strip() for tag in re.split(r'[,;]', tags_text) if tag.strip()]
+                    result['tags'] = tags[:15]  # Limit to 15 tags
+        
+        return result
+
+
+    def generate_ai_summary_and_tags_new(
+        self,
+        visual_descriptions: list,
+        audio_transcript: str,
+        language: str
+    ) -> dict:
+        """
+        Generates a consolidated summary and new tags using an LLM.
+
+        Args:
+            visual_descriptions: A list of descriptions from the video frames.
+            audio_transcript: The transcript from the video's audio.
+            language: The target language for the output (e.g., 'German').
+
+        Returns:
+            A dictionary with 'summary' and 'tags', or None if generation fails.
+        """
+
+        self.load_summary_generator()
+        if not self.summary_generator:
+            print("Warning: Summary generator not available.")
+            return None
+        
+        # Prepare visual context
+        unique_descriptions = sorted(list(set(visual_descriptions)))
+        visual_context = "\n".join(f"- {desc}" for desc in unique_descriptions)
+        
+        # Limit context length to avoid token limits
+        if len(visual_context) > 1000:
+            visual_context = visual_context[:1000] + "..."
+        
+        if len(audio_transcript) > 1000:
+            audio_transcript = audio_transcript[:1000] + "..."
+        
+        # Use improved prompt (no placeholders!)
+        prompt = f"""Summarize this video in {language}.
+
+    The video shows:
+    {visual_context}
+
+    Audio transcript:
+    {audio_transcript if audio_transcript else "(no audio)"}
+
+    Task: Write one summary paragraph, then list 10 keywords separated by commas.
+
+    Summary:"""
+        
+        print(f"\n{'='*60}")
+        print("GENERATING AI SUMMARY")
+        print(f"{'='*60}")
+        print(f"Prompt length: {len(prompt)} characters")
+        
+        try:
+            # Generate with better parameters
+            output = self.summary_generator(
+                prompt,
+                max_length=300,  # Increased for better output
+                min_length=50,   # Ensure substantial output
+                num_beams=4,
+                temperature=0.7,
+                do_sample=True,  # Enable sampling for more natural output
+                truncation=True,
+                early_stopping=True
+            )[0]['generated_text']
+            
+            print(f"\nRaw output ({len(output)} chars):")
+            print(output[:500])
+            
+            # Parse output robustly
+            result = self.parse_llm_output(output)
+            
+            # If parsing failed, try two-step generation
+            if not result['summary'] or not result['tags']:
+                print("\nFirst attempt failed, trying two-step generation...")
+                result = self.generate_summary_and_tags_separately(
+                    self.summary_generator,
+                    visual_context,
+                    audio_transcript,
+                    language
+                )
+            
+            if result['summary']:
+                print(f"\n✓ Summary: {result['summary'][:100]}...")
+            if result['tags']:
+                print(f"✓ Tags ({len(result['tags'])}): {', '.join(result['tags'][:5])}...")
+            
+            print(f"XXXXXXXXXXXXX result: {result}")
+            return result if (result['summary'] or result['tags']) else None
+            
+        except Exception as e:
+            print(f"Error during AI summary generation: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def generate_ai_summary_and_tags(self, visual_descriptions: List[str], audio_transcript: str, language: str) -> Optional[Dict]:
         """
         Generates a consolidated summary and new tags using an LLM.
@@ -287,12 +508,12 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
             print("  Generating AI summary and tags...")
             # The final prompt should also be truncated as a safeguard, though it's much less likely to overflow now.
             output = self.summary_generator(
-                prompt, max_length=400, num_beams=4,
+                prompt, max_length=400, num_beams=4, min_length=50, temperature=0.7, do_sample=True,
                 early_stopping=True, truncation=True
             )[0]['generated_text']
 
             print("xxxxxxxxxxxxxxxx OUTPUT:", output)
-            
+
             # Parse the output
             summary_match = re.search(r"Summary:\s*(.*?)Tags:", output, re.DOTALL | re.IGNORECASE)
             tags_match = re.search(r"Tags:\s*(.*)", output, re.IGNORECASE)

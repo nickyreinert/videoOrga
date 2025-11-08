@@ -67,9 +67,9 @@ class FrameExtractor:
             # If video has fewer frames than requested, take all
             frame_indices = list(range(total_frames))
         else:
-            # Distribute frames evenly, avoiding first and last 5% (often black)
+            # Distribute frames evenly, avoiding first 5% and last 10% (often black or credits)
             start_frame = int(total_frames * 0.05)
-            end_frame = int(total_frames * 0.95)
+            end_frame = int(total_frames * 0.90) # Reduced from 0.95 to avoid end credits
             frame_indices = np.linspace(start_frame, end_frame, 
                                        self.num_frames, dtype=int).tolist()
         
@@ -118,9 +118,9 @@ class FrameExtractor:
         
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        # Select random frames (avoid first and last 5%)
+        # Select random frames (avoid first 5% and last 10%)
         start_frame = int(total_frames * 0.05)
-        end_frame = int(total_frames * 0.95)
+        end_frame = int(total_frames * 0.90) # Reduced from 0.95
         
         if end_frame - start_frame < self.num_thumbnails:
             # If video is too short, just use evenly spaced frames

@@ -403,6 +403,10 @@ async function openVideoDetailModal(videoId) {
     const transcriptText = video.transcript || 'No transcript available.';
     document.getElementById('videoDetailTranscript').value = transcriptText;
 
+    // Handle AI Summary
+    const summaryText = video.summary || 'No AI summary available.';
+    document.getElementById('videoDetailSummary').value = summaryText;
+
     // Handle thumbnail
     const thumbnailData = video.thumbnail_data || [];
     const thumbnailElement = document.getElementById('videoDetailThumbnail');

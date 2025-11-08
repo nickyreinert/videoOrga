@@ -144,6 +144,9 @@ def get_video_details(video_id):
     
     cursor.execute("SELECT image_data FROM thumbnails WHERE video_id = ? ORDER BY thumbnail_index", (video_id,))
     video_dict['thumbnail_data'] = [row['image_data'] for row in cursor.fetchall()]
+
+    # Ensure the summary is included
+    video_dict['summary'] = video.get('transcript_summary', '')
     db.close()
     return jsonify(video_dict)
 

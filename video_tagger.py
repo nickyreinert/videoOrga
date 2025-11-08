@@ -24,6 +24,8 @@ class VideoTagger:
     def __init__(self, 
                  num_frames: int = 8,
                  tag_language: str = 'en',
+                 summary_prompt_template: str = None,
+                 summary_llm_model: str = "google/flan-t5-base",
                  tag_stopwords: List[str] = None,
                  model_name: str = "blip",
                  db_path: str = None,
@@ -44,6 +46,8 @@ class VideoTagger:
         self.analyzer = AIAnalyzer(
             model_name=model_name,
             tag_language=tag_language,
+            summary_prompt_template=summary_prompt_template,
+            summary_llm_model=summary_llm_model,
             stopwords=tag_stopwords
         )
         
@@ -154,6 +158,22 @@ class VideoTagger:
         else:
             print("\n[5/6] Skipping audio analysis (use --audio to enable)")
         
+        # --- New Step: AI Summary & Tag Generation ---
+        if self.enable_audio and config.get('use_ai_summary', False):
+            print("\n[NEW] Generating consolidated AI summary and tags...")
+            lang_map = {'en': 'English', 'de': 'German', 'fr': 'French', 'es': 'Spanish'}
+            target_language_name = lang_map.get(self.analyzer.tag_language, 'English')
+
+            ai_summary_result = self.analyzer.generate_ai_summary_and_tags(
+                visual_descriptions=analysis['descriptions'],
+                audio_transcript=audio_result['transcript'],
+                language=target_language_name
+            )
+            if ai_summary_result:
+                # Overwrite summary and tags with the new, consolidated results
+                audio_result['summary'] = ai_summary_result['summary']
+                analysis['tags'] = ai_summary_result['tags']
+
         # Step 6: Store everything in database
         print("\n[6/6] Storing in database...")
         
@@ -431,6 +451,14 @@ Examples:
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"Warning: Could not load or parse config file '{args.config}': {e}")
 
+    # --- Top-level settings ---
+    use_ai_summary = config.get('use_ai_summary', False)
+    summary_llm_model = config.get('summary_llm_model', 'google/flan-t5-base')
+
+    # --- Prompt settings ---
+    prompts_config = config.get('prompts', {})
+    summary_prompt_template = prompts_config.get('summary_generation', None)
+
     # Combine settings: CLI > config file > defaults
     # Processing settings
     num_frames = args.frames if args.frames != 8 else config.get('processing', {}).get('num_frames', 8)
@@ -458,9 +486,13 @@ Examples:
         whisper_model=whisper_model,
         language=audio_language,
         tag_language=tag_language,
-        tag_stopwords=tag_stopwords
+        tag_stopwords=tag_stopwords,
+        summary_prompt_template=summary_prompt_template,
+        summary_llm_model=summary_llm_model
     )
     
+    # Pass the 'use_ai_summary' flag to the tagger instance
+    tagger.use_ai_summary = use_ai_summary
     try:
         # Statistics mode
         if args.stats:

@@ -74,8 +74,9 @@ def get_videos():
             params.append(tag)
 
     if search_text:
-        conditions.append("(v.file_name LIKE ? OR v.transcript LIKE ?)")
-        params.extend([f"%{search_text}%", f"%{search_text}%"])
+        # Search across all relevant text fields
+        conditions.append("(v.file_name LIKE ? OR v.description LIKE ? OR v.transcript LIKE ? OR v.transcript_summary LIKE ? OR v.ai_summary LIKE ?)")
+        params.extend([f"%{search_text}%"] * 5)
 
     if start_date:
         conditions.append("v.parsed_datetime >= ?")

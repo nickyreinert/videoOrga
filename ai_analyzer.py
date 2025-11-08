@@ -265,17 +265,23 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
 
         # Combine unique visual descriptions
         visual_context = ". ".join(sorted(list(set(visual_descriptions))))
+        # Combine unique visual descriptions into a cleaner, itemized list
+        unique_descriptions = sorted(list(set(visual_descriptions)))
+        visual_context = "\n".join(f"- {desc}" for desc in unique_descriptions)
 
         # Handle potentially long audio transcript using map-reduce summarization
         # The summarizer model itself has a max length (e.g., 512 for t5-base)
         summarized_audio_transcript = self._summarize_text_in_chunks(audio_transcript)
 
         # Build the prompt
+        # Build the prompt - a more direct, few-shot prompt can improve compliance
         prompt = self.summary_prompt_template.format(
             visual_context=visual_context,
             audio_transcript=summarized_audio_transcript,
             language=language
         )
+
+        print("xxxxxxxxxxxxxxxx PROMPT:", prompt)
 
         try:
             print("  Generating AI summary and tags...")
@@ -285,6 +291,8 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
                 early_stopping=True, truncation=True
             )[0]['generated_text']
 
+            print("xxxxxxxxxxxxxxxx OUTPUT:", output)
+            
             # Parse the output
             summary_match = re.search(r"Summary:\s*(.*?)Tags:", output, re.DOTALL | re.IGNORECASE)
             tags_match = re.search(r"Tags:\s*(.*)", output, re.IGNORECASE)
@@ -293,8 +301,13 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
             tags_str = tags_match.group(1).strip() if tags_match else ""
             tags = [tag.strip() for tag in tags_str.split(',') if tag.strip()]
 
+            if len(summary) == 0 and len(tags) == 0:
+                print("  Warning: AI summary generation returned empty results.")
+                return None
+            
             print(f"  AI Summary generated ({len(summary)} chars).")
             print(f"  AI Tags generated: {len(tags)} tags.")
+
             return {'summary': summary, 'tags': tags}
         except Exception as e:
             print(f"Error during AI summary generation: {e}")

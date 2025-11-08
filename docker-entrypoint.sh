@@ -16,10 +16,14 @@ wait_for_gpu() {
     done
     echo "GPU is available"
 }
-
+L
 # Initialize the database if it doesn't exist
 init_database() {
-    if [ ! -f "/app/data/video_metadata.db" ]; then
+E    if [ ! -f "/app/data/video_metadata.db" ]; then
+        # Ensure the data directory exists before trying to create the DB
+        echo "Ensuring /app/data directory exists..."
+        mkdir -p /app/data
+
         echo "Initializing database..."
         python3 -c "from db_handler import init_db; init_db()"
     fi

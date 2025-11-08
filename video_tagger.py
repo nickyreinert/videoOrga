@@ -30,6 +30,7 @@ class VideoTagger:
                  summary_context_window: int = 512,
                  tag_stopwords: List[str] = None,
                  model_name: str = "blip",
+                 use_ai_summary: bool = False,
                  db_path: str = None,
                  enable_audio: bool = False,
                  whisper_model: str = "base", language: str = None,
@@ -40,6 +41,7 @@ class VideoTagger:
         Args:
             num_frames: Number of frames to extract per video
             model_name: AI model to use ('blip2', 'blip', 'clip')
+            use_ai_summary: Whether to generate a consolidated summary using an LLM.
             db_path: Path to SQLite database (default: video_archive.db in current dir)
             enable_audio: Whether to transcribe and summarize audio
             whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
@@ -56,6 +58,7 @@ class VideoTagger:
             stopwords=tag_stopwords
         )
         
+        self.use_ai_summary = use_ai_summary
         # Audio analysis (optional)
         self.enable_audio = enable_audio
         if enable_audio:
@@ -139,6 +142,9 @@ class VideoTagger:
         print("\n[4/6] Analyzing frames with AI...")
         try:
             analysis = self.analyzer.analyze_frames(frames)
+
+            print(f"  Generated {len(analysis['tags'])} tags")
+            print(f"  Generated description: {analysis['descriptions'][0][:50]}...")
         except Exception as e:
             print(f"Error analyzing frames: {e}")
             return None
@@ -502,11 +508,10 @@ Examples:
         summary_prompt_template=summary_prompt_template,
         summary_llm_model=summary_llm_model,
         summary_context_window=summary_context_window,
-        no_pre_detect=no_pre_detect
+        no_pre_detect=no_pre_detect,
+        use_ai_summary=use_ai_summary
     )
     
-    # Pass the 'use_ai_summary' flag to the tagger instance
-    tagger.use_ai_summary = use_ai_summary
     try:
         # Statistics mode
         if args.stats:

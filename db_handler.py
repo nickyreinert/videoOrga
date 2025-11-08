@@ -228,7 +228,7 @@ class DatabaseHandler:
                 file_created_date, file_modified_date, parsed_datetime,
                 duration_seconds, fps, width, height, resolution, codec,
                 processed_date, frames_analyzed, description, has_speech,
-                transcript, transcript_summary, ai_summary, audio_language, word_count
+                transcript, transcript_summary, ai_summary, audio_language, word_count, notes
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get('file_path'),
@@ -252,7 +252,8 @@ class DatabaseHandler:
             data.get('transcript_summary'),
             data.get('ai_summary'),
             data.get('audio_language'),
-            data.get('word_count', 0)
+            data.get('word_count', 0),
+            data.get('notes')
         ))
         
         self.conn.commit()
@@ -278,7 +279,8 @@ class DatabaseHandler:
                 ai_summary = ?,
                 audio_language = ?,
                 word_count = ?,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = CURRENT_TIMESTAMP,
+                notes = ?
             WHERE id = ?
         """, (
             data.get('file_size_bytes'),
@@ -297,6 +299,7 @@ class DatabaseHandler:
             data.get('ai_summary'),
             data.get('audio_language'),
             data.get('word_count', 0),
+            data.get('notes'),
             video_id
         ))
         self.conn.commit()

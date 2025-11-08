@@ -48,19 +48,12 @@ class AIAnalyzer:
         self.tag_language = tag_language.lower()
         self.translator = None
         self.summary_context_window = summary_context_window
-        self.summary_llm_model = summary_llm_model
+        self.summary_llm_model = summary_llm_model or "mistralai/Mistral-7B-Instruct-v0.2"
         if summary_prompt_template:
             self.summary_prompt_template = summary_prompt_template
         else:
-            # Default prompt if none is provided
-            self.summary_prompt_template = """
-Analyze the following visual and audio context from a video.
-Visual Context: "{visual_context}"
-Audio Context: "{audio_transcript}"
-Based on all the information, perform two tasks:
-1. Write a concise, one-paragraph summary of the video in {language}.
-2. Provide a comma-separated list of 10-15 relevant keywords (tags) in {language}.
-Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
+            raise ValueError("A summary prompt template must be provided.")
+
         self.summary_generator = None
 
         # Setup stopwords
@@ -126,15 +119,23 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
         if self.summary_generator is not None:
             return
 
-        print("Loading AI summary generator model...")
-        from transformers import pipeline
+        print(f"Loading AI summary generator model ({self.summary_llm_model})...")
+        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
         try:
-            # Using a small, multilingual T5 model that is good at instruction-following tasks.
+            # Load the tokenizer and model with 4-bit quantization
+            tokenizer = AutoTokenizer.from_pretrained(self.summary_llm_model)
+            model = AutoModelForCausalLM.from_pretrained(
+                self.summary_llm_model,
+                device_map="auto",
+                torch_dtype=torch.bfloat16,
+                load_in_4bit=True
+            )
+
             self.summary_generator = pipeline(
-                "text2text-generation",
-                model=self.summary_llm_model,
-                device=0 if self.device == "cuda" else -1
+                "text-generation",
+                model=model,
+                tokenizer=tokenizer
             )
             print("AI summary generator loaded successfully.")
         except Exception as e:
@@ -506,10 +507,17 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
 
         try:
             print("  Generating AI summary and tags...")
-            # The final prompt should also be truncated as a safeguard, though it's much less likely to overflow now.
             output = self.summary_generator(
-                prompt, max_length=400, num_beams=4, min_length=50, temperature=0.7, do_sample=True,
-                early_stopping=True, truncation=True
+                prompt,
+                max_new_tokens=300,  # Max tokens to generate
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.95,
+                top_k=50,
+                pad_token_id=self.summary_generator.tokenizer.eos_token_id,
+                eos_token_id=self.summary_generator.tokenizer.eos_token_id,
+                num_return_sequences=1,
+                truncation=True
             )[0]['generated_text']
 
             print("xxxxxxxxxxxxxxxx OUTPUT:", output)

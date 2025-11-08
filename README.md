@@ -98,7 +98,11 @@ For speech transcription:
 # Mac: brew install ffmpeg
 # Windows: Download from https://ffmpeg.org/
 ```
+### Prepare local cache for PyTorch
 
+```bash
+mkdir -p torch-cache
+```
 
 ## Quick Start
 
@@ -251,13 +255,7 @@ Whisper is OpenAI's open-source speech recognition model:
 
 ### AI Summary Models
 
-| Model    | VRAM  | Speed      | Quality | Command |
-|----------|-------|------------|---------|---------|
-| flan-t5-small     | ~1GB  | Basic | Fast   |
-| flan-t5-base | ~16GB  | Good   | Fast  |
-| flan-t5-large    | ~36GB  | Better | Medium  |
-| mt5-base   | ~26GB  | Good      | Medium   |
-| t5-base    | ~1GB | Good   | Fast    |
+- I suggest using `mistralai/Mistral-7B-Instruct-v0.2`, smaller models like `google/flan-t5-base` are faster but cannot handle summary the summary and had trouble returning usable results
 
 
 ## Database Schema

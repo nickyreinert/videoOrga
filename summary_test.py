@@ -15,6 +15,25 @@ from typing import List, Dict, Optional
 
 # --- Static Example Data ---
 
+# A good prompt gives clear instructions to the model.
+# It defines the context, the task, and the desired output format.
+# This prompt is more direct and less likely to cause the model to repeat the input.
+PROMPT = """Write a very brief, one-paragraph summary in {language} for a video with the following content. The summary should combine both the visual and audio information. After the summary, provide a comma-separated list of 10 relevant keywords.
+
+Visuals: A person is walking on a sandy beach next to the ocean.
+Audio: A person is enjoying a peaceful walk on the beach, listening to the waves.
+
+Summary in English: A person enjoys a peaceful walk on a beautiful beach, with the sound of the waves creating a calm atmosphere.
+Tags in English: beach, walking, sand, ocean, waves, peaceful, relaxing, nature, outdoor, vacation
+
+---
+
+Visuals: {visual_context}
+Audio: {audio_transcript}
+
+Summary in {language}:
+Tags in {language}:"""
+
 VISUAL_DESCRIPTIONS = [
     "a drone shot of a person walking on a beach",
     "a close up of a person walking on the sand",
@@ -40,7 +59,7 @@ class SummaryTester:
     """
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.summary_llm_model = "google/flan-t5-base"
+        self.summary_llm_model = "google/flan-t5-large"
         self.summary_generator = None
         print(f"Using device: {self.device}")
 
@@ -70,19 +89,24 @@ class SummaryTester:
         summary = ""
         tags = []
 
-        # Strategy 1: Look for "Summary:" and "Tags:" markers
-        summary_match = re.search(r"Summary:\s*(.+?)(?=Tags:|$)", output, re.DOTALL | re.IGNORECASE)
-        tags_match = re.search(r"Tags:\s*(.+?)$", output, re.DOTALL | re.IGNORECASE)
-
-        if summary_match:
-            summary = summary_match.group(1).strip()
-
-        if tags_match:
-            tags_text = tags_match.group(1).strip()
+        # The model might output "Summary:" and "Tags:" markers.
+        # If not, we can assume the first part is the summary and the second is the tags.
+        if "Tags:" in output:
+            summary_part, tags_part = output.split("Tags:", 1)
+            summary = summary_part.replace("Summary:", "").strip()
+            tags_text = tags_part.strip()
             tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+        else:
+            # Fallback if "Tags:" marker is missing
+            lines = [line.strip() for line in output.split('\n') if line.strip()]
+            if lines:
+                summary = lines[0]
+                if len(lines) > 1:
+                    tags_text = ' '.join(lines[1:])
+                    tags = [tag.strip() for tag in re.split(r'[,;]', tags_text) if tag.strip()]
 
-        # Fallback if markers are not found
-        if not summary and not tags:
+        # Final fallback if parsing fails completely
+        if not summary and not tags and output:
             lines = [line.strip() for line in output.split('\n') if line.strip()]
             if lines:
                 # Assume first non-empty line is the summary
@@ -109,25 +133,13 @@ class SummaryTester:
             return None
 
         # Prepare context
-        visual_context = "\n".join(f"- {desc}" for desc in sorted(list(set(visual_descriptions))))
+        visual_context = ", ".join(sorted(list(set(visual_descriptions))))
 
-        # --- THIS IS THE PROMPT TO EXPERIMENT WITH ---
-        prompt = f"""Analyze the following video content and provide a summary and keywords in {language}.
-
-VISUALS:
-{visual_context}
-
-AUDIO:
-{audio_transcript if audio_transcript else "(No speech)"}
-
-YOUR TASK:
-1. Write a concise, one-paragraph summary of the video.
-2. Provide a comma-separated list of 10-15 relevant keywords (tags).
-
-OUTPUT FORMAT:
-Summary: [Your summary here]
-Tags: [Your tags here]
-"""
+        prompt = PROMPT.format(
+            language=language,
+            visual_context=visual_context,
+            audio_transcript=audio_transcript
+        )
 
         print("\n" + "="*80)
         print("PROMPT SENT TO MODEL:")
@@ -138,12 +150,12 @@ Tags: [Your tags here]
             output = self.summary_generator(
                 prompt,
                 max_length=300,
-                min_length=50,
+                min_length=30,
                 num_beams=4,
-                temperature=0.8,
-                do_sample=True,
-                truncation=True,
-                early_stopping=True
+                temperature=0.8,   # Increase temperature to allow more creativity
+                do_sample=False,    # Enable sampling to avoid repetitive output
+                truncation=False,
+                early_stopping=False
             )[0]['generated_text']
 
             print("\n" + "="*80)

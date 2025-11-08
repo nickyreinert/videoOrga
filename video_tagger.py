@@ -25,8 +25,8 @@ class VideoTagger:
                  num_frames: int = 8,
                  num_thumbnails: int = 5,
                  tag_language: str = 'en',
-                 summary_prompt_template: str = None,
-                 summary_llm_model: str = "google/flan-t5-base",
+                 summary_prompt_template: str = None, 
+                 summary_llm_model: str = "mistralai/Mistral-7B-Instruct-v0.2",
                  summary_context_window: int = 512,
                  tag_stopwords: List[str] = None,
                  model_name: str = "blip",
@@ -470,7 +470,7 @@ Examples:
     # --- AI Summary settings ---
     ai_summary_config = config.get('ai_summary', {})
     use_ai_summary = ai_summary_config.get('use_ai_summary', False)
-    summary_llm_model = ai_summary_config.get('summary_llm_model', 'google/flan-t5-base')
+    summary_llm_model = ai_summary_config.get('summary_llm_model', 'mistralai/Mistral-7B-Instruct-v0.2')
     summary_context_window = ai_summary_config.get('context_window_size', 512)
     
     # Load prompt from file

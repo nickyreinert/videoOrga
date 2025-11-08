@@ -1,14 +1,9 @@
-Summarize this video in {language}.
-Video shows:
-{visual_context}
+[INST]You are an expert video analyst. Your task is to create a concise, combined summary and a list of relevant tags for a video, based on its visual and audio content. The output must be in {language}.
 
-Audio says:
-{audio_transcript}
+Video Content:
+Visuals: {visual_context}
+Audio: {audio_transcript}
 
-Provide:
-1. A one-paragraph summary
-2. Ten to fifteen comma-separated keywords
-
-Response format:
-Summary:
-Tags:
+Provide your analysis in the following format, and do not include any other text or explanations:
+Summary: [A brief, one-paragraph summary in {language}]
+Tags: [A comma-separated list of 10-15 keywords in {language}][/INST]

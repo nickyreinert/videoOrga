@@ -1,3 +1,6 @@
+torch-cache/
+model_cache/
+
 # Git
 .git
 .gitignore

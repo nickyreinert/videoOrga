@@ -32,7 +32,7 @@ docker compose run --rm video-tagger process "/videos/1997/"  --audio --force --
 docker exec video-tagger nvidia-smi
 
 # If needed, restart the NVIDIA container runtime
-sudo systemctl restart nvidia-dockerdocker-compose run --rm video-tagger rm -rf /app/data/cache/*
+sudo systemctl restart nvidia-dockerdocker-compose run --rm video-tagger rm -rf /data/cache/*
 
 # Backup database
-docker cp video-tagger:/app/data/video_metadata.db ./backup/
+docker cp video-tagger:/data/video_metadata.db ./backup/

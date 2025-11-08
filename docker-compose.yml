@@ -1,6 +1,6 @@
 services:
   video-tagger:
-    build: 
+    build:
       context: .
       args:
           - BUILDKIT_INLINE_CACHE=1
@@ -11,17 +11,25 @@ services:
       - type: bind
         source: ./app
         target: /app
+
       - type: bind
         source: ./data
-        target: /app/data
+        target: /data
 
       # Mount video directory (read-only)
+      # IMPORTANT: Update this path to your local video folder
       - type: bind
         source: /e/OneDrive/Videos
         target: /videos
         read_only: true
 
-      # Mount cache directory for model and torch caches         
+      # Mount a persistent volume for installed Python packages.
+      # This avoids re-installing packages on every container start.
+      - type: bind
+        source: ./cache/packages
+        target: /opt/packages
+
+      # Mount a general cache for models, datasets, etc.
       - type: bind
         source: ./cache
         target: /cache
@@ -29,14 +37,18 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - VIDEO_BASE_PATH=/videos
-      - VIDEO_DB_PATH=/app/data/video_metadata.db # Point DB to the correct mounted path
+      - VIDEO_DB_PATH=/data/video_metadata.db # Point DB to the correct mounted path
       - FLASK_APP=web/app.py
       - PYTHONUNBUFFERED=1
-      # Cache/config locations for transformers / torch / huggingface
+      # --- Cache Configuration ---
+      # Point all cache directories to the mounted /cache volume.
+      - PIP_CACHE_DIR=/cache/pip
       - HF_HOME=/cache/huggingface
+      - TRANSFORMERS_CACHE=/cache/huggingface
       - TORCH_HOME=/cache/torch
+      - WHISPER_CACHE=/cache/whisper
       - XDG_CACHE_HOME=/cache/other
-    
+
     deploy:
       resources:
         reservations:

@@ -17,6 +17,7 @@ env/
 
 # Data directories (will be mounted)
 data/
+cache/
 model-cache/
 torch-cache/
 videos/

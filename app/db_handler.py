@@ -652,12 +652,12 @@ def init_db(db_path: str = None):
     Args:
         db_path: Optional path to the SQLite database file. If omitted
                  will use the VIDEO_DB_PATH environment variable or
-                 default to `/app/data/video_metadata.db`.
+                 default to `/data/video_metadata.db`.
     Returns:
         The path to the created database file.
     """
     if db_path is None:
-        db_path = os.environ.get('VIDEO_DB_PATH', '/app/data/video_metadata.db')
+        db_path = os.environ.get('VIDEO_DB_PATH', '/data/video_metadata.db')
 
     # Ensure parent directory exists
     parent = os.path.dirname(db_path)

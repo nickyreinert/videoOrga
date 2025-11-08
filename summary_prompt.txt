@@ -1,0 +1,14 @@
+Summarize this video in {language}.
+Video shows:
+{visual_context}
+
+Audio says:
+{audio_transcript}
+
+Provide:
+1. A one-paragraph summary
+2. Ten to fifteen comma-separated keywords
+
+Response format:
+Summary:
+Tags:

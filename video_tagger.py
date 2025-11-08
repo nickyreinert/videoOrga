@@ -472,7 +472,18 @@ Examples:
     use_ai_summary = ai_summary_config.get('use_ai_summary', False)
     summary_llm_model = ai_summary_config.get('summary_llm_model', 'google/flan-t5-base')
     summary_context_window = ai_summary_config.get('context_window_size', 512)
-    summary_prompt_template = ai_summary_config.get('prompts', {}).get('summary_generation', None)
+    
+    # Load prompt from file
+    summary_prompt_template = None
+    prompt_file_path = ai_summary_config.get('prompt_file')
+    if prompt_file_path:
+        try:
+            with open(prompt_file_path, 'r', encoding='utf-8') as f:
+                summary_prompt_template = f.read()
+            print(f"Loaded AI summary prompt from '{prompt_file_path}'")
+        except FileNotFoundError:
+            print(f"Warning: Prompt file not found at '{prompt_file_path}'. Using default prompt.")
+
 
     # Combine settings: CLI > config file > defaults
     # Processing settings

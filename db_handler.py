@@ -75,6 +75,7 @@ class DatabaseHandler:
                 has_speech INTEGER DEFAULT 0,
                 transcript TEXT,
                 transcript_summary TEXT,
+                ai_summary TEXT,
                 audio_language TEXT,
                 word_count INTEGER,
                 
@@ -145,6 +146,7 @@ class DatabaseHandler:
             self.cursor.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS videos_fts USING fts5(
                     transcript, transcript_summary,
+                    ai_summary,
                     content='videos',
                     content_rowid='id'
                 )
@@ -153,24 +155,24 @@ class DatabaseHandler:
             # Create triggers to keep FTS table in sync
             self.cursor.execute("""
                 CREATE TRIGGER IF NOT EXISTS videos_ai AFTER INSERT ON videos BEGIN
-                    INSERT INTO videos_fts(rowid, transcript, transcript_summary)
-                    VALUES (new.id, new.transcript, new.transcript_summary);
+                    INSERT INTO videos_fts(rowid, transcript, transcript_summary, ai_summary)
+                    VALUES (new.id, new.transcript, new.transcript_summary, new.ai_summary);
                 END;
             """)
             
             self.cursor.execute("""
                 CREATE TRIGGER IF NOT EXISTS videos_ad AFTER DELETE ON videos BEGIN
-                    INSERT INTO videos_fts(videos_fts, rowid, transcript, transcript_summary)
-                    VALUES('delete', old.id, old.transcript, old.transcript_summary);
+                    INSERT INTO videos_fts(videos_fts, rowid, transcript, transcript_summary, ai_summary)
+                    VALUES('delete', old.id, old.transcript, old.transcript_summary, old.ai_summary);
                 END;
             """)
             
             self.cursor.execute("""
                 CREATE TRIGGER IF NOT EXISTS videos_au AFTER UPDATE ON videos BEGIN
-                    INSERT INTO videos_fts(videos_fts, rowid, transcript, transcript_summary)
-                    VALUES('delete', old.id, old.transcript, old.transcript_summary);
-                    INSERT INTO videos_fts(rowid, transcript, transcript_summary)
-                    VALUES (new.id, new.transcript, new.transcript_summary);
+                    INSERT INTO videos_fts(videos_fts, rowid, transcript, transcript_summary, ai_summary)
+                    VALUES('delete', old.id, old.transcript, old.transcript_summary, old.ai_summary);
+                    INSERT INTO videos_fts(rowid, transcript, transcript_summary, ai_summary)
+                    VALUES (new.id, new.transcript, new.transcript_summary, new.ai_summary);
                 END;
             """)
             
@@ -225,9 +227,9 @@ class DatabaseHandler:
                 file_path, file_name, file_size_bytes, file_hash,
                 file_created_date, file_modified_date, parsed_datetime,
                 duration_seconds, fps, width, height, resolution, codec,
-                processed_date, frames_analyzed, description,
-                has_speech, transcript, transcript_summary, audio_language, word_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                processed_date, frames_analyzed, description, has_speech,
+                transcript, transcript_summary, ai_summary, audio_language, word_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get('file_path'),
             data.get('file_name'),
@@ -248,6 +250,7 @@ class DatabaseHandler:
             data.get('has_speech', 0),
             data.get('transcript'),
             data.get('transcript_summary'),
+            data.get('ai_summary'),
             data.get('audio_language'),
             data.get('word_count', 0)
         ))
@@ -272,6 +275,7 @@ class DatabaseHandler:
                 has_speech = ?,
                 transcript = ?,
                 transcript_summary = ?,
+                ai_summary = ?,
                 audio_language = ?,
                 word_count = ?,
                 updated_at = CURRENT_TIMESTAMP
@@ -290,6 +294,7 @@ class DatabaseHandler:
             data.get('has_speech', 0),
             data.get('transcript'),
             data.get('transcript_summary'),
+            data.get('ai_summary'),
             data.get('audio_language'),
             data.get('word_count', 0),
             video_id
@@ -398,10 +403,10 @@ class DatabaseHandler:
         
         if search_text:
             conditions.append(
-                "(v.file_name LIKE ? OR v.description LIKE ? OR v.transcript LIKE ? OR v.transcript_summary LIKE ?)"
+                "(v.file_name LIKE ? OR v.description LIKE ? OR v.transcript LIKE ? OR v.transcript_summary LIKE ? OR v.ai_summary LIKE ?)"
             )
             search_pattern = f"%{search_text}%"
-            params.extend([search_pattern] * 4)
+            params.extend([search_pattern] * 5)
         
         if has_speech is not None:
             conditions.append("v.has_speech = ?")
@@ -442,6 +447,7 @@ class DatabaseHandler:
         video_dict['thumbnails'] = [dict(row) for row in self.cursor.fetchall()]
         video_dict['transcript'] = video_dict.get('transcript')
         video_dict['transcript_summary'] = video_dict.get('transcript_summary')
+        video_dict['ai_summary'] = video_dict.get('ai_summary')
         
         return video_dict
     
@@ -487,8 +493,8 @@ class DatabaseHandler:
         try:
             self.cursor.execute("DELETE FROM videos_fts")
             self.cursor.execute("""
-                INSERT INTO videos_fts(rowid, transcript, transcript_summary)
-                SELECT id, transcript, transcript_summary FROM videos
+                INSERT INTO videos_fts(rowid, transcript, transcript_summary, ai_summary)
+                SELECT id, transcript, transcript_summary, ai_summary FROM videos
                 WHERE transcript IS NOT NULL OR transcript_summary IS NOT NULL
             """)
             self.conn.commit()

@@ -26,6 +26,9 @@ flask>=2.3.0
 flask-cors>=4.0.0
 humanize>=4.8.0
 
+# Translation support for tags 
+sentencepiece=>=0.1.99
+
 # Note: FFmpeg must be installed on your system for audio extraction
 # Linux: sudo apt install ffmpeg
 # Mac: brew install ffmpeg

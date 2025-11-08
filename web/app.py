@@ -146,7 +146,8 @@ def get_video_details(video_id):
     video_dict['thumbnail_data'] = [row['image_data'] for row in cursor.fetchall()]
 
     # Ensure the summary is included
-    video_dict['summary'] = video.get('transcript_summary', '')
+    # Prioritize the new ai_summary, fall back to the audio-only summary
+    video_dict['summary'] = video['ai_summary'] if (video['ai_summary']) else (video['transcript_summary'] if 'transcript_summary' in video.keys() else '')
     db.close()
     return jsonify(video_dict)
 

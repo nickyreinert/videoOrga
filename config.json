@@ -1,18 +1,23 @@
 {
-    "_description": "Top-level settings for the video tagging process.",
-    "use_ai_summary": true,
-    "summary_llm_model": "google/flan-t5-base",
 
-    "prompts": {
-        "_description": "Define custom prompts for AI models. Use placeholders like {language}, {visual_context}, and {audio_transcript}.",
-        "summary_generation": "Analyze the following visual and audio context from a video.\n\nVisual Context: \"{visual_context}\"\nAudio Context: \"{audio_transcript}\"\n\nBased on all the information, perform two tasks:\n1. Write a concise, one-paragraph summary of the video in {language}.\n2. Provide a comma-separated list of 10-15 relevant keywords (tags) in {language}.\n\nOutput format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"
+    "language": "de,en",
+    "ai_summary": {
+        "_description": "Settings for the consolidated AI summary feature.",
+        "use_ai_summary": true,
+        "summary_llm_model": "google/flan-t5-base",
+        "context_window_size": 1500,
+        "prompts": {
+            "_description": "Define custom prompts for AI models. Use placeholders like {language}, {visual_context}, and {audio_transcript}.",
+            "summary_generation": "Analyze the following visual and audio context from a video.\n\nVisual Context: \"{visual_context}\"\nAudio Context: \"{audio_transcript}\"\n\nBased on all the information, perform two tasks:\n1. Write a concise, one-paragraph summary of the video in {language}.\n2. Provide a comma-separated list of 10-15 relevant keywords (tags) in {language}.\n\nOutput format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"
+        }
     },
 
     "processing": {
         "_description": "Settings for video processing and frame analysis.",
         "num_frames": 12,
+        "num_thumbnails": 5,
         "model_name": "blip",
-        "force_reprocess": false,
+        "force_reprocess": true,
         "recursive_search": true
     },
     "tags": {
@@ -24,8 +29,9 @@
     },
     "audio": {
         "_description": "Settings for audio transcription with Whisper.",
-        "enabled": true,
-        "whisper_model": "base",
-        "language": "de,en"
+        "enabled": false,
+        "whisper_model": "tiny",
+        "language": "de,en",
+        "no_pre_detect": true
     }
 }

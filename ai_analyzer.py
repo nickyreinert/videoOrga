@@ -26,7 +26,9 @@ class AIAnalyzer:
                  tag_language: str = 'en',
                  summary_llm_model: str = "google/flan-t5-base",
                  summary_prompt_template: str = None,
+                 summary_context_window: int = 512,
                  stopwords: Optional[List[str]] = None):
+
         """
         Initialize AI analyzer
 
@@ -36,6 +38,7 @@ class AIAnalyzer:
             tag_language: Target language for tags (e.g., 'en', 'de').
             summary_llm_model: The model to use for generating summaries and tags.
             summary_prompt_template: The prompt template for the summary LLM.
+            summary_context_window: The context window size for the summarizer model.
             stopwords: Custom list of stopwords to remove from tags.
         """
         self.model_name = model_name
@@ -44,6 +47,7 @@ class AIAnalyzer:
         self.processor = None
         self.tag_language = tag_language.lower()
         self.translator = None
+        self.summary_context_window = summary_context_window
         self.summary_llm_model = summary_llm_model
         if summary_prompt_template:
             self.summary_prompt_template = summary_prompt_template
@@ -205,6 +209,43 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
 
         return tags
 
+    def _summarize_text_in_chunks(self, text: str) -> str:
+        """
+        Summarizes long text by splitting it into chunks (Map-Reduce).
+        This avoids context window overflow errors.
+        """
+        if not text:
+            return ""
+
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(self.summary_llm_model)
+
+        tokens = tokenizer.encode(text)
+        max_chunk_size = self.summary_context_window - 50  # Leave room for prompt and model overhead
+
+        if len(tokens) <= max_chunk_size:
+            # Text is short enough, no chunking needed
+            return text
+
+        print(f"  Audio transcript is too long ({len(tokens)} tokens). Summarizing in chunks...")
+        chunks = [tokens[i:i + max_chunk_size] for i in range(0, len(tokens), max_chunk_size)]
+        chunk_texts = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
+
+        intermediate_summaries = []
+        for i, chunk_text in enumerate(chunk_texts):
+            print(f"    Summarizing chunk {i+1}/{len(chunk_texts)}...")
+            # Simple summarization prompt for each chunk
+            prompt = f"Summarize the following text concisely:\n\n{chunk_text}"
+            try:
+                summary = self.summary_generator(prompt, max_length=150, min_length=20, do_sample=False, truncation=True)[0]['generated_text']
+                intermediate_summaries.append(summary)
+            except Exception as e:
+                print(f"      Warning: Failed to summarize chunk {i+1}. Error: {e}")
+
+        combined_summary = " ".join(intermediate_summaries)
+        print(f"  Finished summarizing chunks. Combined length: {len(combined_summary)} chars.")
+        return combined_summary
+
     def generate_ai_summary_and_tags(self, visual_descriptions: List[str], audio_transcript: str, language: str) -> Optional[Dict]:
         """
         Generates a consolidated summary and new tags using an LLM.
@@ -225,16 +266,24 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
         # Combine unique visual descriptions
         visual_context = ". ".join(sorted(list(set(visual_descriptions))))
 
+        # Handle potentially long audio transcript using map-reduce summarization
+        # The summarizer model itself has a max length (e.g., 512 for t5-base)
+        summarized_audio_transcript = self._summarize_text_in_chunks(audio_transcript, self.summary_context_window)
+
         # Build the prompt
         prompt = self.summary_prompt_template.format(
             visual_context=visual_context,
-            audio_transcript=audio_transcript,
+            audio_transcript=summarized_audio_transcript,
             language=language
         )
 
         try:
             print("  Generating AI summary and tags...")
-            output = self.summary_generator(prompt, max_length=400, num_beams=4, early_stopping=True)[0]['generated_text']
+            # The final prompt should also be truncated as a safeguard, though it's much less likely to overflow now.
+            output = self.summary_generator(
+                prompt, max_length=400, num_beams=4,
+                early_stopping=True, truncation=True
+            )[0]['generated_text']
 
             # Parse the output
             summary_match = re.search(r"Summary:\s*(.*?)Tags:", output, re.DOTALL | re.IGNORECASE)

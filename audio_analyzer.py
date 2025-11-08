@@ -397,7 +397,8 @@ def test_audio_analysis(video_path: str):
     """Test function to verify audio analysis works"""
     analyzer = AudioAnalyzer(
         whisper_model="base",  # Good balance
-        device="auto"
+        device="auto",
+        no_pre_detect=True
     )
     
     try:

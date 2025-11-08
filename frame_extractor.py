@@ -17,7 +17,7 @@ from PIL import Image
 class FrameExtractor:
     """Extracts frames from videos using various sampling strategies"""
     
-    def __init__(self, num_frames: int = 8):
+    def __init__(self, num_frames: int = 8, num_thumbnails: int = 5):
         """
         Initialize frame extractor
         
@@ -25,6 +25,7 @@ class FrameExtractor:
             num_frames: Number of frames to extract per video
         """
         self.num_frames = num_frames
+        self.num_thumbnails = num_thumbnails
     
     def extract_frames(self, video_path: str) -> Tuple[List[np.ndarray], dict]:
         """
@@ -96,7 +97,7 @@ class FrameExtractor:
         codec = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)])
         return codec.strip() if codec.strip() else "unknown"
     
-    def extract_thumbnails(self, video_path: str, num_thumbnails: int = 3) -> List[Tuple]:
+    def extract_thumbnails(self, video_path: str) -> List[Tuple]:
         """
         Extract random frames as thumbnails (base64 encoded)
         
@@ -121,12 +122,12 @@ class FrameExtractor:
         start_frame = int(total_frames * 0.05)
         end_frame = int(total_frames * 0.95)
         
-        if end_frame - start_frame < num_thumbnails:
+        if end_frame - start_frame < self.num_thumbnails:
             # If video is too short, just use evenly spaced frames
-            frame_indices = np.linspace(start_frame, end_frame, num_thumbnails, dtype=int).tolist()
+            frame_indices = np.linspace(start_frame, end_frame, self.num_thumbnails, dtype=int).tolist()
         else:
             # Random selection
-            frame_indices = sorted(random.sample(range(start_frame, end_frame), num_thumbnails))
+            frame_indices = sorted(random.sample(range(start_frame, end_frame), self.num_thumbnails))
         
         thumbnails = []
         

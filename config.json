@@ -1,0 +1,16 @@
+{
+    "processing": {
+        "num_frames": 12,
+        "model_name": "blip",
+        "force_reprocess": false,
+        "recursive_search": true
+    },
+    "tags": {
+        "language": "de"
+    },
+    "audio": {
+        "enabled": true,
+        "whisper_model": "base",
+        "language": "de,en"
+    }
+}

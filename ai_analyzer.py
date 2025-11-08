@@ -1,283 +1,181 @@
 """
-AI Image Analyzer Module
-Uses local vision-language models to generate tags from video frames
-Optimized for NVIDIA RTX 3070 (8GB VRAM)
+AI Frame Analyzer
+Analyzes image frames using various models (BLIP, CLIP) and generates tags.
+Includes translation and stopword removal capabilities.
 """
 
 import torch
 from PIL import Image
-import numpy as np
-from typing import List, Dict
-from collections import Counter
+from typing import List, Dict, Optional
+import re
 
+try:
+    import nltk
+    from nltk.corpus import stopwords as nltk_stopwords
+    nltk.download('stopwords', quiet=True)
+    NLTK_AVAILABLE = True
+except ImportError:
+    NLTK_AVAILABLE = False
 
 class AIAnalyzer:
-    """Analyzes images using local AI models to generate descriptive tags"""
-    
-    def __init__(self, model_name: str = "blip2", device: str = "auto"):
+    """Analyzes image frames to generate descriptions and tags"""
+
+    def __init__(self,
+                 model_name: str = "blip",
+                 device: str = "auto",
+                 tag_language: str = 'en',
+                 stopwords: Optional[List[str]] = None):
         """
         Initialize AI analyzer
-        
+
         Args:
-            model_name: Model to use ('blip2', 'blip', 'clip')
+            model_name: AI model to use ('blip', 'blip2', 'clip')
             device: Device to run on ('cuda', 'cpu', or 'auto')
+            tag_language: Target language for tags (e.g., 'en', 'de').
+            stopwords: Custom list of stopwords to remove from tags.
         """
         self.model_name = model_name
         self.device = self._setup_device(device)
         self.model = None
         self.processor = None
+        self.tag_language = tag_language.lower()
+        self.translator = None
+
+        # Setup stopwords
+        self.stopwords = set()
+        if NLTK_AVAILABLE:
+            try:
+                lang_map = {'en': 'english', 'de': 'german', 'fr': 'french', 'es': 'spanish'}
+                if self.tag_language in lang_map:
+                    self.stopwords.update(nltk_stopwords.words(lang_map[self.tag_language]))
+                    print(f"Loaded {len(self.stopwords)} stopwords from NLTK for language '{self.tag_language}'.")
+            except Exception as e:
+                print(f"Warning: Could not load NLTK stopwords for '{self.tag_language}': {e}")
         
-        print(f"Using device: {self.device}")
-        
+        # Add custom stopwords from config if any are provided
+        if stopwords:
+            self.stopwords.update(stopwords)
+
+        print(f"AI Analyzer initialized (model: {model_name}, device: {self.device})")
+        if self.tag_language != 'en':
+            print(f"Tag language set to: {self.tag_language.upper()}")
+        if self.stopwords:
+            print(f"Stopword removal enabled for tags ({len(self.stopwords)} words).")
+
     def _setup_device(self, device: str) -> str:
         """Determine the best device to use"""
         if device == "auto":
             return "cuda" if torch.cuda.is_available() else "cpu"
         return device
-    
+
     def load_model(self):
-        """Load the AI model (lazy loading to save memory)"""
+        """Load the selected AI model and processor"""
         if self.model is not None:
             return
-        
-        print(f"Loading {self.model_name} model...")
-        
-        if self.model_name == "blip2":
-            self._load_blip2()
-        elif self.model_name == "blip":
-            self._load_blip()
-        elif self.model_name == "clip":
-            self._load_clip()
-        else:
-            raise ValueError(f"Unknown model: {self.model_name}")
-    
-    def _load_blip2(self):
-        """Load BLIP-2 model (best for descriptive captions)"""
+
+        print(f"Loading AI model ({self.model_name})...")
+        from transformers import BlipProcessor, BlipForConditionalGeneration
+
         try:
-            from transformers import Blip2Processor, Blip2ForConditionalGeneration
-            
-            # Use the smaller BLIP-2 variant for 8GB VRAM
-            model_id = "Salesforce/blip2-opt-2.7b"
-            
-            self.processor = Blip2Processor.from_pretrained(model_id, use_fast=True)
-            self.model = Blip2ForConditionalGeneration.from_pretrained(
-                model_id,
-                dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                device_map=self.device
-            )
-            
-            print("BLIP-2 model loaded successfully")
-            
+            if self.model_name == 'blip':
+                model_id = "Salesforce/blip-image-captioning-large"
+                self.processor = BlipProcessor.from_pretrained(model_id)
+                self.model = BlipForConditionalGeneration.from_pretrained(model_id).to(self.device)
+            else:
+                raise NotImplementedError(f"Model '{self.model_name}' is not yet supported.")
+            print("AI model loaded successfully.")
         except Exception as e:
-            print(f"Error loading BLIP-2: {e}")
-            print("Install with: pip install transformers salesforce-lavis")
+            print(f"Error loading model '{self.model_name}': {e}")
             raise
-    
-    def _load_blip(self):
-        """Load BLIP model (faster, less VRAM)"""
-        try:
-            from transformers import BlipProcessor, BlipForConditionalGeneration
-            
-            model_id = "Salesforce/blip-image-captioning-large"
-            
-            self.processor = BlipProcessor.from_pretrained(model_id, use_fast=True)
-            # Load model first, then move to device and set dtype
-            self.model = BlipForConditionalGeneration.from_pretrained(model_id)
-            self.model.to(self.device)
-            if self.device == "cuda":
-                self.model.half()  # Convert to float16 for GPU
-            
-            print("BLIP model loaded successfully")
-            
-        except Exception as e:
-            print(f"Error loading BLIP: {e}")
-            raise
-    
-    def _load_clip(self):
-        """Load CLIP model (fastest, good for classification)"""
-        try:
-            from transformers import CLIPProcessor, CLIPModel
-            
-            model_id = "openai/clip-vit-large-patch14"
-            
-            self.processor = CLIPProcessor.from_pretrained(model_id)
-            self.model = CLIPModel.from_pretrained(model_id).to(self.device)
-            
-            print("CLIP model loaded successfully")
-            
-        except Exception as e:
-            print(f"Error loading CLIP: {e}")
-            raise
-    
-    def analyze_frame(self, frame: np.ndarray) -> str:
+
+        # Load translation model if needed
+        if self.tag_language != 'en':
+            print(f"Loading translation model for '{self.tag_language.upper()}'...")
+            from transformers import pipeline
+            try:
+                self.translator = pipeline("translation_en_to_" + self.tag_language, model=f"Helsinki-NLP/opus-mt-en-{self.tag_language}")
+                print("Translation model loaded.")
+            except Exception as e:
+                print(f"Warning: Could not load translation model for '{self.tag_language}'. Tags will be in English. Error: {e}")
+                self.translator = None
+
+    def analyze_frames(self, frames: List[Image.Image]) -> Dict:
         """
-        Analyze a single frame and return a description
-        
+        Analyze a list of frames to generate descriptions and tags.
+
         Args:
-            frame: Image as numpy array (RGB)
-            
+            frames: List of PIL Image objects.
+
         Returns:
-            Text description of the frame
+            Dictionary with descriptions, tags, and frame count.
         """
         self.load_model()
-        
-        # Convert numpy array to PIL Image
-        image = Image.fromarray(frame)
-        
-        if self.model_name in ["blip2", "blip"]:
-            return self._caption_with_blip(image)
-        elif self.model_name == "clip":
-            return self._classify_with_clip(image)
-    
-    def _caption_with_blip(self, image: Image) -> str:
-        """Generate caption using BLIP/BLIP-2"""
-        inputs = self.processor(images=image, return_tensors="pt").to(
-            self.device, 
-            torch.float16 if self.device == "cuda" else torch.float32
-        )
-        
-        with torch.no_grad():
-            generated_ids = self.model.generate(**inputs, max_length=50)
-        
-        caption = self.processor.batch_decode(
-            generated_ids, 
-            skip_special_tokens=True
-        )[0].strip()
-        
-        return caption
-    
-    def _classify_with_clip(self, image: Image) -> str:
-        """Classify image using CLIP with predefined categories"""
-        # Common video content categories
-        categories = [
-            "indoor scene", "outdoor scene", "nature", "urban environment",
-            "people", "food", "table", "kitchen", "living room", "bedroom",
-            "car", "street", "highway", "autobahn", "traffic",
-            "restaurant", "office", "store", "shopping",
-            "daytime", "nighttime", "sunny", "cloudy",
-            "close-up", "wide shot", "aerial view"
-        ]
-        
-        inputs = self.processor(
-            text=categories,
-            images=image,
-            return_tensors="pt",
-            padding=True
-        ).to(self.device)
-        
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            logits_per_image = outputs.logits_per_image
-            probs = logits_per_image.softmax(dim=1)
-        
-        # Get top 5 categories
-        top_probs, top_indices = probs[0].topk(5)
-        results = [categories[idx] for idx in top_indices]
-        
-        return ", ".join(results)
-    
-    def analyze_frames(self, frames: List[np.ndarray]) -> Dict:
-        """
-        Analyze multiple frames and aggregate results
-        
-        Args:
-            frames: List of frame arrays
-            
-        Returns:
-            Dictionary with tags and metadata
-        """
-        print(f"Analyzing {len(frames)} frames...")
-        
+
         descriptions = []
+        all_tags = set()
+
         for i, frame in enumerate(frames):
-            print(f"  Processing frame {i+1}/{len(frames)}...", end="\r")
-            desc = self.analyze_frame(frame)
-            descriptions.append(desc)
-        
-        print()  # New line after progress
-        
-        # Extract tags from descriptions
-        tags = self._extract_tags_from_descriptions(descriptions)
-        
+            print(f"  Analyzing frame {i+1}/{len(frames)}...")
+            inputs = self.processor(images=frame, return_tensors="pt").to(self.device)
+            out = self.model.generate(**inputs, max_new_tokens=50)
+            description = self.processor.decode(out[0], skip_special_tokens=True)
+            descriptions.append(description)
+
+            # Translate if necessary
+            if self.translator:
+                try:
+                    translated_description = self.translator(description)[0]['translation_text']
+                except Exception as e:
+                    print(f"Warning: Translation failed for a frame. Using English. Error: {e}")
+                    translated_description = description
+            else:
+                translated_description = description
+
+            # Extract tags from the (translated) description
+            tags = self._extract_tags_from_text(translated_description)
+            all_tags.update(tags)
+
+        # Post-process tags
+        final_tags = sorted(list(all_tags))
+
         return {
             'descriptions': descriptions,
-            'tags': tags,
+            'tags': final_tags,
             'frame_count': len(frames)
         }
-    
-    def _extract_tags_from_descriptions(self, descriptions: List[str]) -> List[str]:
+
+    def _extract_tags_from_text(self, text: str) -> List[str]:
         """
-        Extract common tags/keywords from multiple descriptions
-        
+        Extracts and cleans keywords from a given text.
+
         Args:
-            descriptions: List of text descriptions
-            
+            text: The text to process.
+
         Returns:
-            List of extracted tags
+            A list of cleaned, lowercased tags.
         """
-        # Simple keyword extraction - count word frequency
-        all_words = []
-        
-        # Words to ignore (common articles, prepositions, etc.)
-        stop_words = {
-            'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been',
-            'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from',
-            'this', 'that', 'these', 'those', 'and', 'or', 'but'
-        }
-        
-        for desc in descriptions:
-            # Simple word tokenization
-            words = desc.lower().replace(',', ' ').split()
-            words = [w.strip('.,!?;:()[]{}') for w in words]
-            words = [w for w in words if len(w) > 2 and w not in stop_words]
-            all_words.extend(words)
-        
-        # Count word frequency
-        word_counts = Counter(all_words)
-        
-        # Get most common words as tags (appearing in at least 2 frames or top 10)
-        min_frequency = max(2, len(descriptions) // 4)
-        tags = [word for word, count in word_counts.most_common(15) 
-                if count >= min_frequency]
-        
-        return tags[:10]  # Return top 10 tags
-    
+        # Remove "a photography of", "a picture of", etc.
+        text = re.sub(r'^\s*(a photograph of|a picture of|a close up of|an image of)\s*', '', text, flags=re.IGNORECASE)
+        # Split into words, remove non-alphanumeric characters
+        words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]+\b', text.lower())
+
+        # Filter out stopwords and single-character words
+        if self.stopwords:
+            tags = [word for word in words if word not in self.stopwords and len(word) > 2]
+        else:
+            tags = [word for word in words if len(word) > 2]
+
+        return tags
+
     def cleanup(self):
         """Free up GPU memory"""
-        if self.model is not None:
-            del self.model
-            del self.processor
-            self.model = None
-            self.processor = None
-            
+        del self.model
+        del self.processor
+        if self.translator:
+            del self.translator
+        self.model = None
+        self.processor = None
+        self.translator = None
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        
-        print("Model cleaned up")
-
-
-def test_analyzer(image_path: str = None):
-    """Test the analyzer with a sample image"""
-    analyzer = AIAnalyzer(model_name="blip")  # Start with faster BLIP
-    
-    if image_path:
-        from PIL import Image
-        img = Image.open(image_path)
-        frame = np.array(img)
-        
-        result = analyzer.analyze_frame(frame)
-        print(f"\nAnalysis result: {result}")
-    else:
-        print("No image provided for testing")
-        print("Usage: python ai_analyzer.py <path_to_image>")
-    
-    analyzer.cleanup()
-
-
-if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) > 1:
-        test_analyzer(sys.argv[1])
-    else:
-        test_analyzer()
+        print("AI analyzer cleaned up.")

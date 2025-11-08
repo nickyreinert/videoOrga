@@ -4,6 +4,7 @@ Processes videos, extracts frames, analyzes with AI, and stores in SQLite databa
 """
 
 import os
+import json
 import argparse
 from pathlib import Path
 import warnings
@@ -22,6 +23,8 @@ class VideoTagger:
     
     def __init__(self, 
                  num_frames: int = 8,
+                 tag_language: str = 'en',
+                 tag_stopwords: List[str] = None,
                  model_name: str = "blip",
                  db_path: str = None,
                  enable_audio: bool = False,
@@ -38,7 +41,11 @@ class VideoTagger:
             language: Language for transcription ('en', 'de', etc.) or None for auto-detect
         """
         self.extractor = FrameExtractor(num_frames=num_frames)
-        self.analyzer = AIAnalyzer(model_name=model_name)
+        self.analyzer = AIAnalyzer(
+            model_name=model_name,
+            tag_language=tag_language,
+            stopwords=tag_stopwords
+        )
         
         # Audio analysis (optional)
         self.enable_audio = enable_audio
@@ -398,6 +405,11 @@ Examples:
         help='Show database statistics'
     )
     
+    parser.add_argument(
+        '--config',
+        help='Path to a JSON configuration file'
+    )
+    
     args = parser.parse_args()
     
     # Determine database path
@@ -410,14 +422,43 @@ Examples:
             # If processing a file, put DB in same directory as file
             db_path = str(Path(args.input).parent / "video_archive.db")
     
+    # --- Configuration Loading ---
+    config = {}
+    if args.config:
+        try:
+            with open(args.config, 'r') as f:
+                config = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Warning: Could not load or parse config file '{args.config}': {e}")
+
+    # Combine settings: CLI > config file > defaults
+    # Processing settings
+    num_frames = args.frames if args.frames != 8 else config.get('processing', {}).get('num_frames', 8)
+    model_name = args.model if args.model != 'blip' else config.get('processing', {}).get('model_name', 'blip')
+    recursive = args.recursive or config.get('processing', {}).get('recursive_search', False)
+    force = args.force or config.get('processing', {}).get('force_reprocess', False)
+
+    # Tag settings
+    tag_config = config.get('tags', {})
+    tag_language = tag_config.get('language', 'en')
+    tag_stopwords = tag_config.get('stopwords', None)
+
+    # Audio settings
+    audio_config = config.get('audio', {})
+    enable_audio = args.audio or audio_config.get('enabled', False)
+    whisper_model = args.whisper_model if args.whisper_model != 'base' else audio_config.get('whisper_model', 'base')
+    audio_language = args.language if args.language != 'de' else audio_config.get('language', 'de')
+
     # Create tagger instance
     tagger = VideoTagger(
-        num_frames=args.frames,
-        model_name=args.model,
+        num_frames=num_frames,
+        model_name=model_name,
         db_path=db_path,
-        enable_audio=args.audio,
-        whisper_model=args.whisper_model,
-        language=args.language
+        enable_audio=enable_audio,
+        whisper_model=whisper_model,
+        language=audio_language,
+        tag_language=tag_language,
+        tag_stopwords=tag_stopwords
     )
     
     try:
@@ -448,10 +489,10 @@ Examples:
         
         if input_path.is_file():
             # Process single video
-            tagger.process_video(str(input_path), force=args.force)
+            tagger.process_video(str(input_path), force=force)
         elif input_path.is_dir():
             # Process directory
-            tagger.process_directory(str(input_path), recursive=args.recursive, force=args.force)
+            tagger.process_directory(str(input_path), recursive=recursive, force=force)
         else:
             print(f"Error: {args.input} is not a valid file or directory")
             return

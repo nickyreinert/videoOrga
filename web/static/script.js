@@ -407,13 +407,26 @@ async function openVideoDetailModal(videoId) {
     const summaryText = video.summary || 'No AI summary available.';
     document.getElementById('videoDetailSummary').value = summaryText;
 
-    // Handle thumbnail
-    const thumbnailData = video.thumbnail_data || [];
-    const thumbnailElement = document.getElementById('videoDetailThumbnail');
-    if (thumbnailData.length > 0) {
-        thumbnailElement.src = `data:image/jpeg;base64,${thumbnailData[0]}`;
-    } else {
-        thumbnailElement.src = ''; // Or a placeholder image
+    // Handle thumbnails and descriptions
+    const thumbnailsContainer = document.getElementById('videoDetailThumbnailsContainer');
+    thumbnailsContainer.innerHTML = ''; // Clear previous content
+
+    const thumbnails = video.thumbnail_data || [];
+    const descriptions = video.frame_descriptions || [];
+
+    if (thumbnails.length > 0) {
+        thumbnails.forEach((thumb, index) => {
+            const desc = descriptions.find(d => d.frame_index === index)?.description || 'No description for this frame.';
+            thumbnailsContainer.innerHTML += `
+                <div class="row mb-3">
+                    <div class="col-4">
+                        <img src="data:image/jpeg;base64,${thumb}" class="img-fluid rounded" alt="Thumbnail ${index + 1}">
+                    </div>
+                    <div class="col-8">
+                        <p class="small text-muted"><strong>Frame ${index + 1}:</strong> ${desc}</p>
+                    </div>
+                </div>`;
+        });
     }
 
     // Show the modal

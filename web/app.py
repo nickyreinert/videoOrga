@@ -146,6 +146,9 @@ def get_video_details(video_id):
     cursor.execute("SELECT image_data FROM thumbnails WHERE video_id = ? ORDER BY thumbnail_index", (video_id,))
     video_dict['thumbnail_data'] = [row['image_data'] for row in cursor.fetchall()]
 
+    cursor.execute("SELECT frame_index, description FROM frame_descriptions WHERE video_id = ? ORDER BY frame_index", (video_id,))
+    video_dict['frame_descriptions'] = [dict(row) for row in cursor.fetchall()]
+
     # Ensure the summary is included
     # Prioritize the new ai_summary, fall back to the audio-only summary
     video_dict['summary'] = video['ai_summary'] if (video['ai_summary']) else (video['transcript_summary'] if 'transcript_summary' in video.keys() else '')

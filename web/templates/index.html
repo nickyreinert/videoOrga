@@ -82,7 +82,7 @@
 
     <!-- Video Detail Modal -->
     <div class="modal fade" id="videoDetailModal" tabindex="-1" aria-labelledby="videoDetailModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="videoDetailModalLabel">Video Details</h5>
@@ -90,8 +90,11 @@
                 </div>
                 <div class="modal-body">
                     <div class="row">
-                        <div class="col-md-6">
-                            <img id="videoDetailThumbnail" src="" class="img-fluid" alt="Thumbnail">
+                        <div class="col-md-6" style="max-height: 70vh; overflow-y: auto;">
+                            <h5>Analyzed Frames</h5>
+                            <div id="videoDetailThumbnailsContainer">
+                                <!-- Thumbnails and descriptions will be injected here by script.js -->
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <form id="videoDetailForm">

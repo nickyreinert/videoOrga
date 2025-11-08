@@ -449,6 +449,14 @@ class DatabaseHandler:
         """, (video_id,))
         video_dict['thumbnails'] = [dict(row) for row in self.cursor.fetchall()]
         video_dict['transcript'] = video_dict.get('transcript')
+
+        # Get frame descriptions
+        self.cursor.execute("""
+            SELECT frame_index, description
+            FROM frame_descriptions WHERE video_id = ?
+            ORDER BY frame_index
+        """, (video_id,))
+        video_dict['frame_descriptions'] = [dict(row) for row in self.cursor.fetchall()]
         video_dict['transcript_summary'] = video_dict.get('transcript_summary')
         video_dict['ai_summary'] = video_dict.get('ai_summary')
         

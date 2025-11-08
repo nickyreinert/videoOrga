@@ -268,7 +268,7 @@ Output format must be:\nSummary: [Your summary here]\nTags: [Your tags here]"""
 
         # Handle potentially long audio transcript using map-reduce summarization
         # The summarizer model itself has a max length (e.g., 512 for t5-base)
-        summarized_audio_transcript = self._summarize_text_in_chunks(audio_transcript, self.summary_context_window)
+        summarized_audio_transcript = self._summarize_text_in_chunks(audio_transcript)
 
         # Build the prompt
         prompt = self.summary_prompt_template.format(

@@ -32,9 +32,11 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('start-date').addEventListener('change', filterVideos);
         document.getElementById('end-date').addEventListener('change', filterVideos);
 
-        // Set up view switch handler
-        document.getElementById('viewSwitch').addEventListener('change', () => {
-            renderPage();
+        // Set up view switch handlers
+        document.querySelectorAll('input[name="viewRadio"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                renderPage(e.target.value);
+            });
         });
 
         // Initial load
@@ -171,14 +173,15 @@ function updateVideoGrid() {
     `}).join('');
 }
 
-function renderListView() {
+function renderListView(paginatedVideos) {
     const grid = document.getElementById('video-grid');
-    const paginatedVideos = videos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
+    grid.className = 'list-view'; // Remove col classes
+    
     grid.innerHTML = `
         <table class="table table-striped">
             <thead>
                 <tr>
+                    <th scope="col">Thumbnail</th>
                     <th scope="col" onclick="sortVideos('filename')">Filename <i class="fas fa-sort"></i></th>
                     <th scope="col" onclick="sortVideos('creation_date')">Creation Date <i class="fas fa-sort"></i></th>
                     <th scope="col">Tags</th>
@@ -188,13 +191,20 @@ function renderListView() {
             <tbody>
                 ${paginatedVideos.map(video => `
                     <tr>
+                        <td>
+                            ${video.thumbnail_data && video.thumbnail_data.length > 0
+                                ? `<img src="data:image/jpeg;base64,${video.thumbnail_data[0]}" 
+                                       alt="Thumbnail" style="width: 100px; height: auto;">`
+                                : `<div style="width: 100px; height: 56px; background-color: #ccc;"></div>`
+                            }
+                        </td>
                         <td>${video.file_name}</td>
                         <td>${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</td>
                         <td>
-                            ${(video.tags || []).map(tag => `<span class="badge bg-primary me-1">${tag}</span>`).join('')}
                             ${(video.tags || []).map(tag => 
                                 `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="toggleTag('${tag}')">${tag}</span>`
-                            ).join('')}                        </td>
+                            ).join('')}
+                        </td>
                         <td>
                             <button class="btn btn-primary btn-sm" onclick="openVideo(${video.id})">Open</button>
                             <button class="btn btn-secondary btn-sm" onclick='openVideoDetailModal(${video.id})'>Details</button>
@@ -204,6 +214,38 @@ function renderListView() {
             </tbody>
         </table>
     `;
+}
+
+function renderGridView(paginatedVideos, viewType = 'grid') {
+    const grid = document.getElementById('video-grid');
+    const colClass = viewType === 'compact' ? 'col-6 col-md-4 col-lg-2' : 'col-12 col-md-6 col-lg-4';
+    grid.className = `row g-4 ${viewType}-view`;
+
+    grid.innerHTML = paginatedVideos.map(video => {
+        const thumbnails = video.thumbnail_data || [];
+        const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
+
+        return `
+        <div class="video-item ${colClass}">
+            <div class="card h-100">
+                ${firstThumbnail
+                    ? `<img src="data:image/jpeg;base64,${firstThumbnail}" class="card-img-top" alt="Thumbnail" data-thumbnails='${JSON.stringify(thumbnails)}' onmouseenter="startThumbnailCycle(this)" onmouseleave="stopThumbnailCycle(this)">`
+                    : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 150px;">No Thumbnail</div>`
+                }
+                <div class="card-body" onclick='openVideoDetailModal(${video.id})'>
+                    <h5 class="card-title text-truncate" title="${video.file_name}">${video.file_name}</h5>
+                    <p class="card-text"><small class="text-muted">${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</small></p>
+                    <div class="tags-compact mb-2">
+                        ${(video.tags || []).map(tag => `<span class="badge me-1 ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="event.stopPropagation(); toggleTag('${tag}');">${tag}</span>`).join('')}
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-primary btn-sm" onclick="openVideo(${video.id})">Play</button>
+                    <button class="btn btn-secondary btn-sm" onclick="openVideoDetailModal(${video.id})">Edit</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 function sortVideos(key) {
@@ -227,11 +269,17 @@ function sortVideos(key) {
     renderPage();
 }
 
-function renderPage() {
-    if (document.getElementById('viewSwitch').checked) {
-        renderListView();
+function renderPage(viewType = null) {
+    const selectedViewRadio = document.querySelector('input[name="viewRadio"]:checked');
+    // Default to 'grid' view if the radio buttons aren't on the page or none is checked
+    const selectedView = viewType || (selectedViewRadio ? selectedViewRadio.value : 'grid');
+    const paginatedVideos = videos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    if (selectedView === 'list') {
+        renderListView(paginatedVideos);
     } else {
-        updateVideoGrid();
+        // 'grid' or 'compact'
+        renderGridView(paginatedVideos, selectedView);
     }
     renderPagination();
 }

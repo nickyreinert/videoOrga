@@ -158,12 +158,24 @@ def stream_video(video_id):
     if not video:
         return "Video not found", 404
 
-    # The database stores the absolute path, so we use it directly.
-    # We no longer need to join it with VIDEO_BASE_PATH.
-    video_path = video['file_path']
+    # The path in the DB is absolute from the scanner's perspective. We need to find
+    # its path relative to the directory where the DB is located, which is assumed
+    # to be the root of the scanned collection.
+    db_directory = os.path.dirname(os.path.abspath(DATABASE))
+    try:
+        # Make the DB path relative to the DB's directory
+        relative_path = os.path.relpath(video['file_path'], db_directory)
+    except ValueError:
+        # This can happen on Windows if the file path is on a different drive
+        # than the database. In this case, we fall back to just using the filename.
+        relative_path = Path(video['file_path']).name
+
+    # Join the relative path with the web server's video base path.
+    video_relative_path = relative_path
+    video_path = os.path.join(VIDEO_BASE_PATH, video_relative_path)
 
     if not os.path.exists(video_path):
-        return "Video file not found on disk", 404
+        return f"Video file not found on disk at: {video_path}", 404
 
     range_header = request.headers.get('Range', None)
     size = os.path.getsize(video_path)
@@ -174,6 +186,10 @@ def stream_video(video_id):
             with open(video_path, 'rb') as f:
                 yield from f
         return Response(generate_full(), mimetype="video/mp4", headers={"Content-Length": str(size)})
+        # If no range header, send the initial part of the file.
+        # Browsers will then make subsequent range requests.
+        headers = {"Content-Length": str(size), "Accept-Ranges": "bytes"}
+        return Response(None, 200, mimetype="video/mp4", headers=headers)
 
     # Handle range request
     byte1, byte2 = 0, None

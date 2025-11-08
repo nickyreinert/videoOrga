@@ -16,10 +16,10 @@ wait_for_gpu() {
     done
     echo "GPU is available"
 }
-L
+
 # Initialize the database if it doesn't exist
 init_database() {
-E    if [ ! -f "/app/data/video_metadata.db" ]; then
+    if [ ! -f "/app/data/video_metadata.db" ]; then
         # Ensure the data directory exists before trying to create the DB
         echo "Ensuring /app/data directory exists..."
         mkdir -p /app/data

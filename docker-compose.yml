@@ -27,7 +27,12 @@ services:
       - type: bind
         source: ./model_cache
         target: /app/models
-    
+
+      # Mount for model/cache files to avoid re-downloading large models
+      - type: bind
+        source: ./torch-cache
+        target: /torch-cache
+
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - VIDEO_BASE_PATH=/videos

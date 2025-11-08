@@ -1,6 +1,7 @@
 # Development Dockerfile
 # Only installs dependencies, source code is bind-mounted
-
+# CRITICAL: DO NOT CHANGE VERSION HERE, CUDA VERSION DEEPENDS ON TORCH, TORCHVISION and NUMPY VERSIONS BELOW
+# REFER to https://pytorch.org/get-started/previous-versions/ to see compatible versions
 FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 # Prevent interactive prompts
@@ -25,7 +26,15 @@ RUN pip install --no-cache-dir --upgrade pip
 
 # Install PyTorch with CUDA support FIRST (this is the big download)
 # This layer will be cached unless requirements change
-RUN pip install --no-cache-dir torch==2.1.0 torchvision==0.16.0 numpy==1.26.4 --index-url https://download.pytorch.org/whl/cu118
+# CRITICAL: DO NOT CHANGE VERSIONS HERE, THEY DEPEND ON EACH OTHER AND THE CUDA VERSION DEFINED ABOVE
+# RUN pip install --no-cache-dir torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu118
+RUN if [ ! -f /torch-cache/torch-2.1.0+cu118-cp310-cp310-linux_x86_64.whl ]; then \
+      mkdir -p /torch-cache && \
+      pip download torch==2.1.0+cu118 torchvision==0.16.0+cu118 \
+        --index-url https://download.pytorch.org/whl/cu118 -d /torch-cache; \
+    fi
+    
+RUN pip install --no-index --find-links=/torch-cache torch torchvision
 
 # Create directories for caches and data
 RUN mkdir -p /root/.cache/huggingface /root/.cache/whisper /data /videos

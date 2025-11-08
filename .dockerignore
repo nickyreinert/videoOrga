@@ -17,7 +17,7 @@ env/
 
 # Data directories (will be mounted)
 data/
-model_cache/
+model-cache/
 videos/
 
 # IDE

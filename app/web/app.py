@@ -13,7 +13,7 @@ import subprocess
 import re
 
 # --- Database Setup ---
-DATABASE = os.environ.get('VIDEO_DB_PATH', './data/video_metadata.db')
+DATABASE = os.environ.get('VIDEO_DB_PATH', '/data/video_metadata.db')
 VIDEO_BASE_PATH = os.environ.get('VIDEO_BASE_PATH', '/videos')
 
 def get_db():

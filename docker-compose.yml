@@ -2,13 +2,11 @@ services:
   video-tagger:
     build: 
       context: .
-      args:
-          - BUILDKIT_INLINE_CACHE=1
     ports:
       - "5000:5000"
     volumes:
       - type: bind
-        source: ./
+        source: ./app
         target: /app
         # Exclude patterns to avoid conflicts
       
@@ -21,17 +19,12 @@ services:
       # Mount for persistent data (database, thumbnails, cache)
       - type: bind
         source: ./data
-        target: /app/data
-      
-      # Mount for model/cache files to avoid re-downloading large models
-      - type: bind
-        source: ./model_cache
-        target: /app/models
+        target: /data
 
       # Mount for model/cache files to avoid re-downloading large models
       - type: bind
-        source: ./torch-cache
-        target: /torch-cache
+        source: ./cache
+        target: /cache
 
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
@@ -41,9 +34,12 @@ services:
       - FLASK_DEBUG=1          # Enable debug mode for live reload
       - PYTHONUNBUFFERED=1
       # Cache/config locations for transformers / torch / huggingface
-      - HF_HOME=/app/models/huggingface
-      - TORCH_HOME=/app/models/torch
-      - XDG_CACHE_HOME=/app/models/cache
+      - HF_HOME=/cache/models/huggingface
+      - WHISPER_CACHE=/cache/models/whisper
+      - TRANSFORMERS_CACHE=/cache/transformers
+      - MODELS_CACHE=/cache/models
+      - TORCH_HOME=/cache/models/torch
+      - XDG_CACHE_HOME=/cache/models/other
     
     deploy:
       resources:
@@ -55,8 +51,10 @@ services:
     
     restart: unless-stopped
     
-    # >>> NEW: Override command to use Flask development server <<<
-    command: python3 -m flask run --host=0.0.0.0 --reload
+    # Use the 'serve' command from the entrypoint script.
+    # This ensures wait_for_gpu and init_database are called before starting the server.
+    # The entrypoint's 'serve' block will then start the Flask app.
+    command: serve
 
 volumes:
   video_data:

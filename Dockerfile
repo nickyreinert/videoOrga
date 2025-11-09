@@ -17,21 +17,16 @@ RUN apt-get update && apt-get install -y \
     git \
     dos2unix \
     wget \
-    && rm -rf /var/lib/apt/lists/*
+    libjpeg-dev \
+    libpng-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && ldconfig
 
 # Set Python 3.10 as default
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
-
-# Copy the entrypoint script and make it executable
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN dos2unix /usr/local/bin/docker-entrypoint.sh && \
-    chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# Copy requirements and install them
-COPY requirements.txt /tmp/requirements.txt
 
 # Set environment variables   
 ENV PYTHONUNBUFFERED=1 \

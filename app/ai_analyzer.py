@@ -1,13 +1,17 @@
 """
-AI Frame Analyzer
-Analyzes image frames using various models (BLIP, CLIP) and generates tags.
-Includes translation and stopword removal capabilities.
+AI Frame Analyzer - Refactored to use single multimodal LLM
+Replaces BLIP + Translator + Summary LLM with one efficient model
+COMPATIBLE WITH EXISTING CONFIG STRUCTURE
 """
 
 import torch
 from PIL import Image
 from typing import List, Dict, Optional
 import re
+import os
+
+# Silence tokenizer parallelism warnings globally
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 try:
     import nltk
@@ -18,44 +22,49 @@ except ImportError:
     NLTK_AVAILABLE = False
 
 class AIAnalyzer:
-    """Analyzes image frames to generate descriptions and tags"""
+    """Analyzes image frames and generates summaries using a multimodal LLM"""
 
     def __init__(self,
-                 model_name: str = "blip",
+                 model_name: str = "llava",
                  device: str = "auto",
                  tag_language: str = 'en',
-                 summary_llm_model: str = "google/flan-t5-base",
-                 summary_prompt_template: str = None,
-                 summary_context_window: int = 512,
+                 summary_llm_model: str = None,  # IGNORED - kept for compatibility
+                 summary_prompt_template: str = None,  # IGNORED - kept for compatibility
+                 summary_context_window: int = 512,  # IGNORED - kept for compatibility
                  stopwords: Optional[List[str]] = None):
-
         """
-        Initialize AI analyzer
-
+        Initialize AI analyzer with multimodal LLM
+        
         Args:
-            model_name: AI model to use ('blip', 'blip2', 'clip')
+            model_name: Multimodal model ('llava', 'llava-large', 'blip2', 'instructblip')
             device: Device to run on ('cuda', 'cpu', or 'auto')
-            tag_language: Target language for tags (e.g., 'en', 'de').
-            summary_llm_model: The model to use for generating summaries and tags.
-            summary_prompt_template: The prompt template for the summary LLM.
-            summary_context_window: The context window size for the summarizer model.
-            stopwords: Custom list of stopwords to remove from tags.
+            tag_language: Target language for tags (e.g., 'en', 'de', 'fr')
+            summary_llm_model: IGNORED (kept for config compatibility)
+            summary_prompt_template: IGNORED (kept for config compatibility)
+            summary_context_window: IGNORED (kept for config compatibility)
+            stopwords: Custom list of stopwords to remove from tags
         """
         self.model_name = model_name
         self.device = self._setup_device(device)
+        self.tag_language = tag_language.lower()
         self.model = None
         self.processor = None
-        self.tag_language = tag_language.lower()
-        self.translator = None
-        self.summary_context_window = summary_context_window
-        self.summary_llm_model = summary_llm_model or "mistralai/Mistral-7B-Instruct-v0.2"
-        if summary_prompt_template:
-            self.summary_prompt_template = summary_prompt_template
-        else:
-            raise ValueError("A summary prompt template must be provided.")
-
-        self.summary_generator = None
-
+        
+        # Ignore old config parameters but don't break if they're passed
+        if summary_llm_model or summary_prompt_template:
+            print("Note: summary_llm_model and summary_prompt_template are no longer needed with multimodal LLM")
+        
+        # Map model names to HuggingFace model IDs
+        self.model_mapping = {
+            'llava': 'llava-hf/llava-1.5-7b-hf',
+            'llava-large': 'llava-hf/llava-1.5-13b-hf',
+            'blip2': 'Salesforce/blip2-opt-2.7b',
+            'instructblip': 'Salesforce/instructblip-vicuna-7b',
+            # Old model names - map to multimodal equivalents
+            'blip': 'llava-hf/llava-1.5-7b-hf',  # Default to llava
+            'clip': 'llava-hf/llava-1.5-7b-hf',
+        }
+        
         # Setup stopwords
         self.stopwords = set()
         if NLTK_AVAILABLE:
@@ -67,15 +76,26 @@ class AIAnalyzer:
             except Exception as e:
                 print(f"Warning: Could not load NLTK stopwords for '{self.tag_language}': {e}")
         
-        # Add custom stopwords from config if any are provided
         if stopwords:
             self.stopwords.update(stopwords)
-
+        
+        # Language name mapping for prompts
+        self.lang_names = {
+            'en': 'English',
+            'de': 'German',
+            'fr': 'French',
+            'es': 'Spanish',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'nl': 'Dutch',
+            'pl': 'Polish'
+        }
+        
         print(f"AI Analyzer initialized (model: {model_name}, device: {self.device})")
         if self.tag_language != 'en':
             print(f"Tag language set to: {self.tag_language.upper()}")
         if self.stopwords:
-            print(f"Stopword removal enabled for tags ({len(self.stopwords)} words).")
+            print(f"Stopword removal enabled ({len(self.stopwords)} words)")
 
     def _setup_device(self, device: str) -> str:
         """Determine the best device to use"""
@@ -84,102 +104,172 @@ class AIAnalyzer:
         return device
 
     def load_model(self):
-        """Load the selected AI model and processor"""
+        """Load the multimodal LLM model"""
         if self.model is not None:
             return
 
-        print(f"Loading AI model ({self.model_name})...")
-        from transformers import BlipProcessor, BlipForConditionalGeneration
+        model_id = self.model_mapping.get(self.model_name)
+        if not model_id:
+            print(f"Warning: Unknown model '{self.model_name}', defaulting to llava")
+            model_id = self.model_mapping['llava']
 
+        print(f"Loading multimodal model ({model_id})...")
+        
+        # Use new API to avoid deprecation warning
+        from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+        
         try:
-            if self.model_name == 'blip':
-                model_id = "Salesforce/blip-image-captioning-large"
-                self.processor = BlipProcessor.from_pretrained(model_id)
-                self.model = BlipForConditionalGeneration.from_pretrained(model_id).to(self.device)
-            else:
-                raise NotImplementedError(f"Model '{self.model_name}' is not yet supported.")
-            print("AI model loaded successfully.")
-        except Exception as e:
-            print(f"Error loading model '{self.model_name}': {e}")
-            raise
-
-        # Load translation model if needed
-        if self.tag_language != 'en':
-            print(f"Loading translation model for '{self.tag_language.upper()}'...")
-            from transformers import pipeline
+            # Load processor with fast tokenizer
+            self.processor = AutoProcessor.from_pretrained(
+                model_id,
+                use_fast=True  # Silence slow processor warning
+            )
+            
             try:
-                self.translator = pipeline("translation_en_to_" + self.tag_language, model=f"Helsinki-NLP/opus-mt-en-{self.tag_language}")
-                print("Translation model loaded.")
-            except Exception as e:
-                print(f"Warning: Could not load translation model for '{self.tag_language}'. Tags will be in English. Error: {e}")
-                self.translator = None
+                # Try loading with 4-bit quantization first
+                print("Attempting to load model with 4-bit quantization...")
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_use_double_quant=True,
+                )
+                self.model = AutoModelForImageTextToText.from_pretrained(
+                    model_id,
+                    quantization_config=quantization_config,
+                    device_map="auto",
+                    dtype=torch.float16,
+                )
+                print("Model loaded successfully with 4-bit quantization.")
+            except Exception as e_4bit:
+                print(f"Warning: 4-bit quantization failed: {e_4bit}. Falling back to 8-bit.")
+                try:
+                    # Fallback to 8-bit quantization
+                    quantization_config_8bit = BitsAndBytesConfig(load_in_8bit=True)
+                    self.model = AutoModelForImageTextToText.from_pretrained(
+                        model_id,
+                        quantization_config=quantization_config_8bit,
+                        device_map="auto",
+                        dtype=torch.float16,
+                    )
+                    print("Model loaded successfully with 8-bit quantization.")
+                except Exception as e_8bit:
+                    print(f"Warning: 8-bit quantization also failed: {e_8bit}. Falling back to default loading.")
+                    # If 8-bit also fails, raise the exception to be caught by the outer block
+                    raise e_8bit
 
-    def load_summary_generator(self):
-        """Load a text generation model for creating summaries and tags."""
-        if self.summary_generator is not None:
-            return
-
-        print(f"Loading AI summary generator model ({self.summary_llm_model})...")
-        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-
-        try:
-            # Load the tokenizer and model with 4-bit quantization
-            tokenizer = AutoTokenizer.from_pretrained(self.summary_llm_model)
-            model = AutoModelForCausalLM.from_pretrained(
-                self.summary_llm_model,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                load_in_4bit=True
-            )
-
-            self.summary_generator = pipeline(
-                "text-generation",
-                model=model,
-                tokenizer=tokenizer
-            )
-            print("AI summary generator loaded successfully.")
         except Exception as e:
-            print(f"Error loading summary generator model: {e}")
-            self.summary_generator = None
+            print(f"Warning: Quantized loading failed: {e}. Falling back to default loading (this will use more memory).")
+            # Fallback to loading without any quantization, then manually move to device.
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                dtype=torch.float16 if self.device == 'cuda' else torch.float32
+            ).to(self.device)
+
+            print("Model loaded successfully without quantization.")
+
+        if self.model:
+            self.device = next(self.model.parameters()).device
+            print(f"Model is on device: {self.device}")
+
+    def _build_prompt(self, task: str) -> str:
+        """Build prompt for specific task"""
+        lang_name = self.lang_names.get(self.tag_language, 'English')
+        lang_instruction = f" in {lang_name}" if self.tag_language != 'en' else ""
+        
+        prompts = {
+            'tags': f"""USER: <image>
+Generate relevant tags for this video frame{lang_instruction}.
+Output ONLY comma-separated keywords describing: main subjects, actions, setting, objects, colors, mood.
+Do not include any other text.
+ASSISTANT: Tags:""",
+            
+            'caption': f"""USER: <image>
+Describe this video frame in one concise sentence{lang_instruction}.
+ASSISTANT:""",
+            
+            'detailed': f"""USER: <image>
+Provide a detailed description of this video frame{lang_instruction}.
+Include: main subjects, actions, setting, notable objects, colors, composition, and mood.
+ASSISTANT:"""
+        }
+        
+        return prompts.get(task, prompts['tags'])
+
+    def analyze_frame(self, image: Image.Image, task: str = 'tags') -> str:
+        """
+        Analyze a single frame
+        
+        Args:
+            image: PIL Image object
+            task: 'tags', 'caption', or 'detailed'
+            
+        Returns:
+            Analysis result as string
+        """
+        self.load_model()
+        
+        prompt = self._build_prompt(task)
+        
+        # Process inputs
+        inputs = self.processor(
+            text=prompt,
+            images=image,
+            return_tensors="pt"
+        ).to(self.device)
+        
+        # Generate
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=200 if task == 'detailed' else 100,
+                do_sample=False
+            )
+        
+        # Decode
+        result = self.processor.decode(outputs[0], skip_special_tokens=True)
+        
+        # Remove prompt from output
+        for prompt_part in [prompt, "USER:", "ASSISTANT:", "<image>"]:
+            result = result.replace(prompt_part, "")
+        
+        return result.strip()
 
     def analyze_frames(self, frames: List[Image.Image]) -> Dict:
         """
-        Analyze a list of frames to generate descriptions and tags.
-
+        Analyze multiple frames to generate descriptions and tags
+        
         Args:
-            frames: List of PIL Image objects.
-
+            frames: List of PIL Image objects
+            
         Returns:
-            Dictionary with descriptions, tags, and frame count.
+            Dictionary with descriptions, tags, and frame count
         """
         self.load_model()
-
+        
         descriptions = []
         all_tags = set()
-
+        
         for i, frame in enumerate(frames):
             print(f"  Analyzing frame {i+1}/{len(frames)}...")
-            inputs = self.processor(images=frame, return_tensors="pt").to(self.device)
-            out = self.model.generate(**inputs, max_new_tokens=50)
-            description = self.processor.decode(out[0], skip_special_tokens=True)
-            descriptions.append(description)
-
-            # Translate if necessary
-            if self.translator:
-                try:
-                    translated_description = self.translator(description)[0]['translation_text']
-                except Exception as e:
-                    print(f"Warning: Translation failed for a frame. Using English. Error: {e}")
-                    translated_description = description
-            else:
-                translated_description = description
-
-            # Extract tags from the (translated) description
-            tags = self._extract_tags_from_text(translated_description)
+            
+            # Get caption for this frame
+            caption = self.analyze_frame(frame, task='caption')
+            descriptions.append(caption)
+            
+            # Get tags for this frame
+            tags_str = self.analyze_frame(frame, task='tags')
+            
+            # Parse tags
+            tags = self._extract_tags_from_text(tags_str)
             all_tags.update(tags)
-
+        
         # Post-process tags
         final_tags = sorted(list(all_tags))
+        
+        print(f"  Generated {len(final_tags)} unique tags")
+        print(f"  Sample tags: {', '.join(final_tags['tags'][:5])}...")
+        print(f"  Description samples: {descriptions[0][:20]}...")
 
         return {
             'descriptions': descriptions,
@@ -189,371 +279,159 @@ class AIAnalyzer:
 
     def _extract_tags_from_text(self, text: str) -> List[str]:
         """
-        Extracts and cleans keywords from a given text.
-
+        Extract and clean tags from text
+        
         Args:
-            text: The text to process.
-
+            text: Raw text containing tags
+            
         Returns:
-            A list of cleaned, lowercased tags.
+            List of cleaned tags
         """
-        # Remove "a photography of", "a picture of", etc.
+        # Remove common prefixes
+        text = re.sub(r'^\s*(tags:|keywords:)\s*', '', text, flags=re.IGNORECASE)
         text = re.sub(r'^\s*(a photograph of|a picture of|a close up of|an image of)\s*', '', text, flags=re.IGNORECASE)
-        # Split into words, remove non-alphanumeric characters
-        words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]+\b', text.lower())
-
-        # Filter out stopwords and single-character words
-        if self.stopwords:
-            tags = [word for word in words if word not in self.stopwords and len(word) > 2]
-        else:
-            tags = [word for word in words if len(word) > 2]
-
+        
+        # Split by comma and clean
+        tags = [tag.strip().lower() for tag in text.split(',')]
+        
+        # Also extract words if format isn't comma-separated
+        if len(tags) <= 1:
+            words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]+\b', text.lower())
+            tags = words
+        
+        # Filter out empty, short, and stopword tags
+        tags = [
+            tag for tag in tags 
+            if tag and len(tag) > 2 and tag not in self.stopwords
+        ]
+        
         return tags
 
-    def _summarize_text_in_chunks(self, text: str) -> str:
+    def generate_video_summary(self, 
+                               visual_descriptions: List[str],
+                               audio_transcript: str = "") -> str:
         """
-        Summarizes long text by splitting it into chunks (Map-Reduce).
-        This avoids context window overflow errors.
-        """
-        if not text:
-            return ""
-
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(self.summary_llm_model)
-
-        tokens = tokenizer.encode(text)
-        max_chunk_size = self.summary_context_window - 50  # Leave room for prompt and model overhead
-
-        if len(tokens) <= max_chunk_size:
-            # Text is short enough, no chunking needed
-            return text
-
-        print(f"  Audio transcript is too long ({len(tokens)} tokens). Summarizing in chunks...")
-        chunks = [tokens[i:i + max_chunk_size] for i in range(0, len(tokens), max_chunk_size)]
-        chunk_texts = [tokenizer.decode(chunk, skip_special_tokens=True) for chunk in chunks]
-
-        intermediate_summaries = []
-        for i, chunk_text in enumerate(chunk_texts):
-            print(f"    Summarizing chunk {i+1}/{len(chunk_texts)}...")
-            # Simple summarization prompt for each chunk
-            prompt = f"Summarize the following text concisely:\n\n{chunk_text}"
-            try:
-                summary = self.summary_generator(prompt, max_length=150, min_length=20, do_sample=False, truncation=True)[0]['generated_text']
-                intermediate_summaries.append(summary)
-            except Exception as e:
-                print(f"      Warning: Failed to summarize chunk {i+1}. Error: {e}")
-
-        combined_summary = " ".join(intermediate_summaries)
-        print(f"  Finished summarizing chunks. Combined length: {len(combined_summary)} chars.")
-        return combined_summary
-
-
-
-    def generate_summary_and_tags_separately(summary_generator, visual_context, audio_transcript, language):
-        """
-        Generate summary and tags in two separate calls for better quality
+        Generate a video-level summary from frame descriptions and audio
         
         Args:
-            summary_generator: The HuggingFace pipeline
-            visual_context: Visual descriptions
-            audio_transcript: Audio transcript
-            language: Target language
+            visual_descriptions: List of frame descriptions
+            audio_transcript: Audio transcript (optional)
             
         Returns:
-            Dictionary with 'summary' and 'tags'
+            Summary text
         """
+        self.load_model()
         
-        # Step 1: Generate summary
-        summary_prompt = f"""Summarize this video content in one paragraph in {language}.
-
-    Visual scenes: {visual_context}
-
-    Audio: {audio_transcript}
-
-    Summary:"""
+        lang_name = self.lang_names.get(self.tag_language, 'English')
+        lang_instruction = f" in {lang_name}" if self.tag_language != 'en' else ""
         
-        try:
-            summary_output = summary_generator(
-                summary_prompt,
-                max_length=200,
-                min_length=30,
-                do_sample=False,
-                truncation=True
-            )[0]['generated_text']
-            
-            # Clean up output (FLAN-T5 might repeat the prompt)
-            summary = summary_output.replace(summary_prompt, "").strip()
-            
-        except Exception as e:
-            print(f"Summary generation failed: {e}")
-            summary = ""
-        
-        # Step 2: Generate tags
-        tags_prompt = f"""List 10-15 relevant keywords for this video in {language}, separated by commas.
-
-    Content: {visual_context[:200]}
-
-    Keywords:"""
-        
-        try:
-            tags_output = summary_generator(
-                tags_prompt,
-                max_length=100,
-                do_sample=False,
-                truncation=True
-            )[0]['generated_text']
-            
-            # Clean up and parse tags
-            tags_text = tags_output.replace(tags_prompt, "").strip()
-            tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
-            
-        except Exception as e:
-            print(f"Tag generation failed: {e}")
-            tags = []
-        
-        return {
-            'summary': summary,
-            'tags': tags
-        }
-
-    def parse_llm_output(output: str, fallback_summary: str = "", fallback_tags: list = None) -> dict:
-        """
-        Robustly parse LLM output even if format is imperfect
-        
-        Args:
-            output: Raw LLM output
-            fallback_summary: Use this if parsing fails
-            fallback_tags: Use these if parsing fails
-            
-        Returns:
-            Dictionary with 'summary' and 'tags'
-        """
-        import re
-        
-        if fallback_tags is None:
-            fallback_tags = []
-        
-        result = {
-            'summary': fallback_summary,
-            'tags': fallback_tags.copy()
-        }
-        
-        # Try multiple parsing strategies
-        
-        # Strategy 1: Look for "Summary:" and "Tags:" markers
-        summary_match = re.search(r"Summary:\s*(.+?)(?=Tags:|$)", output, re.DOTALL | re.IGNORECASE)
-        tags_match = re.search(r"Tags:\s*(.+?)$", output, re.DOTALL | re.IGNORECASE)
-        
-        if summary_match:
-            summary_text = summary_match.group(1).strip()
-            # Remove placeholder text
-            if '[' not in summary_text and 'here]' not in summary_text.lower():
-                result['summary'] = summary_text
-        
-        if tags_match:
-            tags_text = tags_match.group(1).strip()
-            # Remove placeholder text
-            if '[' not in tags_text and 'here]' not in tags_text.lower():
-                # Parse comma-separated tags
-                tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
-                if tags and tags[0].lower() != 'your':  # Filter out "Your tags here"
-                    result['tags'] = tags
-        
-        # Strategy 2: If no markers found, treat first line as summary, rest as tags
-        if not result['summary'] and not result['tags']:
-            lines = [line.strip() for line in output.split('\n') if line.strip()]
-            if lines:
-                result['summary'] = lines[0]
-                if len(lines) > 1:
-                    # Try to parse remaining lines as tags
-                    tags_text = ' '.join(lines[1:])
-                    tags = [tag.strip() for tag in re.split(r'[,;]', tags_text) if tag.strip()]
-                    result['tags'] = tags[:15]  # Limit to 15 tags
-        
-        return result
-
-
-    def generate_ai_summary_and_tags_new(
-        self,
-        visual_descriptions: list,
-        audio_transcript: str,
-        language: str
-    ) -> dict:
-        """
-        Generates a consolidated summary and new tags using an LLM.
-
-        Args:
-            visual_descriptions: A list of descriptions from the video frames.
-            audio_transcript: The transcript from the video's audio.
-            language: The target language for the output (e.g., 'German').
-
-        Returns:
-            A dictionary with 'summary' and 'tags', or None if generation fails.
-        """
-
-        self.load_summary_generator()
-        if not self.summary_generator:
-            print("Warning: Summary generator not available.")
-            return None
-        
-        # Prepare visual context
+        # Combine visual descriptions
         unique_descriptions = sorted(list(set(visual_descriptions)))
-        visual_context = "\n".join(f"- {desc}" for desc in unique_descriptions)
+        visual_context = "\n".join(f"- {desc}" for desc in unique_descriptions[:10])
         
-        # Limit context length to avoid token limits
-        if len(visual_context) > 1000:
-            visual_context = visual_context[:1000] + "..."
-        
+        # Truncate audio if too long
         if len(audio_transcript) > 1000:
             audio_transcript = audio_transcript[:1000] + "..."
         
-        # Use improved prompt (no placeholders!)
-        prompt = f"""Summarize this video in {language}.
-
-    The video shows:
-    {visual_context}
-
-    Audio transcript:
-    {audio_transcript if audio_transcript else "(no audio)"}
-
-    Task: Write one summary paragraph, then list 10 keywords separated by commas.
-
-    Summary:"""
+        # Build prompt
+        audio_section = f"\n\nAudio transcript:\n{audio_transcript}" if audio_transcript else ""
         
-        print(f"\n{'='*60}")
-        print("GENERATING AI SUMMARY")
-        print(f"{'='*60}")
-        print(f"Prompt length: {len(prompt)} characters")
+        prompt = f"""USER: Summarize this video{lang_instruction}.
+
+The video shows:
+{visual_context}{audio_section}
+
+Provide a concise summary paragraph.
+ASSISTANT:"""
+        
+        # Generate summary
+        inputs = self.processor(
+            text=prompt,
+            return_tensors="pt"
+        ).to(self.device)
+        
+        with torch.no_grad():
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=200,
+                do_sample=True,
+                temperature=0.7
+            )
+        
+        summary = self.processor.decode(outputs[0], skip_special_tokens=True)
+        
+        # Clean up output
+        for prompt_part in [prompt, "USER:", "ASSISTANT:"]:
+            summary = summary.replace(prompt_part, "")
+        
+        return summary.strip()
+
+    def generate_ai_summary_and_tags(self,
+                                     visual_descriptions: List[str],
+                                     audio_transcript: str,
+                                     language: str) -> Optional[Dict]:
+        """
+        Generate consolidated summary and tags
+        (Compatible interface with old system)
+        
+        Args:
+            visual_descriptions: List of frame descriptions
+            audio_transcript: Audio transcript
+            language: Target language (uses self.tag_language instead)
+            
+        Returns:
+            Dictionary with 'summary' and 'tags'
+        """
+        print("  Generating AI summary and tags with multimodal LLM...")
         
         try:
-            # Generate with better parameters
-            output = self.summary_generator(
-                prompt,
-                max_length=300,  # Increased for better output
-                min_length=50,   # Ensure substantial output
-                num_beams=4,
-                temperature=0.7,
-                do_sample=True,  # Enable sampling for more natural output
-                truncation=True,
-                early_stopping=True
-            )[0]['generated_text']
+            # Generate summary
+            summary = self.generate_video_summary(visual_descriptions, audio_transcript)
             
-            print(f"\nRaw output ({len(output)} chars):")
-            print(output[:500])
+            # Extract tags from all descriptions
+            all_tags = set()
+            for desc in visual_descriptions:
+                tags = self._extract_tags_from_text(desc)
+                all_tags.update(tags)
             
-            # Parse output robustly
-            result = self.parse_llm_output(output)
+            # If we have audio, extract keywords from it too
+            if audio_transcript:
+                words = re.findall(r'\b[a-zA-Z]{4,}\b', audio_transcript.lower())
+                audio_tags = [w for w in words if w not in self.stopwords][:10]
+                all_tags.update(audio_tags)
             
-            # If parsing failed, try two-step generation
-            if not result['summary'] or not result['tags']:
-                print("\nFirst attempt failed, trying two-step generation...")
-                result = self.generate_summary_and_tags_separately(
-                    self.summary_generator,
-                    visual_context,
-                    audio_transcript,
-                    language
-                )
+            tags = sorted(list(all_tags))[:20]
             
-            if result['summary']:
-                print(f"\n✓ Summary: {result['summary'][:100]}...")
-            if result['tags']:
-                print(f"✓ Tags ({len(result['tags'])}): {', '.join(result['tags'][:5])}...")
+            print(f"  Generated summary ({len(summary)} chars)")
+            print(f"  Generated {len(tags)} tags")
             
-            print(f"XXXXXXXXXXXXX result: {result}")
-            return result if (result['summary'] or result['tags']) else None
+            return {
+                'summary': summary,
+                'tags': tags
+            }
             
         except Exception as e:
-            print(f"Error during AI summary generation: {e}")
+            print(f"Error generating AI summary: {e}")
             import traceback
             traceback.print_exc()
             return None
 
-    def generate_ai_summary_and_tags(self, visual_descriptions: List[str], audio_transcript: str, language: str) -> Optional[Dict]:
-        """
-        Generates a consolidated summary and new tags using an LLM.
-
-        Args:
-            visual_descriptions: A list of descriptions from the video frames.
-            audio_transcript: The transcript from the video's audio.
-            language: The target language for the output (e.g., 'German').
-
-        Returns:
-            A dictionary with 'summary' and 'tags', or None if generation fails.
-        """
-        self.load_summary_generator()
-        if not self.summary_generator:
-            print("Warning: Summary generator not available. Skipping AI summary.")
-            return None
-
-        # Combine unique visual descriptions
-        visual_context = ". ".join(sorted(list(set(visual_descriptions))))
-        # Combine unique visual descriptions into a cleaner, itemized list
-        unique_descriptions = sorted(list(set(visual_descriptions)))
-        visual_context = "\n".join(f"- {desc}" for desc in unique_descriptions)
-
-        # Handle potentially long audio transcript using map-reduce summarization
-        # The summarizer model itself has a max length (e.g., 512 for t5-base)
-        summarized_audio_transcript = self._summarize_text_in_chunks(audio_transcript)
-
-        # Build the prompt
-        # Build the prompt - a more direct, few-shot prompt can improve compliance
-        prompt = self.summary_prompt_template.format(
-            visual_context=visual_context,
-            audio_transcript=summarized_audio_transcript,
-            language=language
-        )
-
-        print("xxxxxxxxxxxxxxxx PROMPT:", prompt)
-
-        try:
-            print("  Generating AI summary and tags...")
-            output = self.summary_generator(
-                prompt,
-                max_new_tokens=300,  # Max tokens to generate
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.95,
-                top_k=50,
-                pad_token_id=self.summary_generator.tokenizer.eos_token_id,
-                eos_token_id=self.summary_generator.tokenizer.eos_token_id,
-                num_return_sequences=1,
-                truncation=True
-            )[0]['generated_text']
-
-            print("xxxxxxxxxxxxxxxx OUTPUT:", output)
-
-            # Parse the output
-            summary_match = re.search(r"Summary:\s*(.*?)Tags:", output, re.DOTALL | re.IGNORECASE)
-            tags_match = re.search(r"Tags:\s*(.*)", output, re.IGNORECASE)
-
-            summary = summary_match.group(1).strip() if summary_match else ""
-            tags_str = tags_match.group(1).strip() if tags_match else ""
-            tags = [tag.strip() for tag in tags_str.split(',') if tag.strip()]
-
-            if len(summary) == 0 and len(tags) == 0:
-                print("  Warning: AI summary generation returned empty results.")
-                return None
-            
-            print(f"  AI Summary generated ({len(summary)} chars).")
-            print(f"  AI Tags generated: {len(tags)} tags.")
-
-            return {'summary': summary, 'tags': tags}
-        except Exception as e:
-            print(f"Error during AI summary generation: {e}")
-            return None
-
+    # Legacy compatibility methods (no-op)
+    def load_summary_generator(self):
+        """Legacy method - no longer needed"""
+        pass
+    
     def cleanup(self):
         """Free up GPU memory"""
-        del self.model
-        del self.processor
-        if self.translator:
-            del self.translator
-        self.model = None
-        self.processor = None
-        self.translator = None
-        if self.summary_generator:
-            del self.summary_generator
-            self.summary_generator = None
+        if self.model is not None:
+            del self.model
+            self.model = None
+        
+        if self.processor is not None:
+            del self.processor
+            self.processor = None
+        
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        print("AI analyzer cleaned up.")
+        
+        print("AI analyzer cleaned up")

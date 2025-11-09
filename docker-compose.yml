@@ -5,6 +5,19 @@ services:
     ports:
       - "5000:5000"
     volumes:
+
+      - type: bind
+        source: ./docker-entrypoint.sh
+        target: /usr/local/bin/docker-entrypoint.sh
+
+      - type: bind
+        source: ./requirements.txt
+        target: /tmp/requirements.txt
+
+      - type: bind
+        source: ./constraints.txt
+        target: /app/constraints.txt
+        
       - type: bind
         source: ./app
         target: /app
@@ -36,7 +49,6 @@ services:
       # Cache/config locations for transformers / torch / huggingface
       - HF_HOME=/cache/models/huggingface
       - WHISPER_CACHE=/cache/models/whisper
-      - TRANSFORMERS_CACHE=/cache/transformers
       - MODELS_CACHE=/cache/models
       - TORCH_HOME=/cache/models/torch
       - XDG_CACHE_HOME=/cache/models/other

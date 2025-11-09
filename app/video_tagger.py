@@ -1,6 +1,7 @@
 """
 Video Auto-Tagger - Main Script with SQLite Storage
 Processes videos, extracts frames, analyzes with AI, and stores in SQLite database
+NOW USING SINGLE MULTIMODAL LLM FOR EVERYTHING
 """
 
 import os
@@ -25,40 +26,37 @@ class VideoTagger:
                  num_frames: int = 8,
                  num_thumbnails: int = 5,
                  tag_language: str = 'en',
-                 summary_prompt_template: str = None, 
-                 summary_llm_model: str = "mistralai/Mistral-7B-Instruct-v0.2",
-                 summary_context_window: int = 512,
                  tag_stopwords: List[str] = None,
-                 model_name: str = "blip",
-                 use_ai_summary: bool = False,
+                 model_name: str = "llava",  # Changed from 'blip' to 'llava'
                  db_path: str = None,
                  enable_audio: bool = False,
-                 whisper_model: str = "base", language: str = None,
+                 whisper_model: str = "base",
+                 language: str = None,
                  no_pre_detect: bool = False):
         """
         Initialize video tagger with SQLite backend
         
         Args:
             num_frames: Number of frames to extract per video
-            model_name: AI model to use ('blip2', 'blip', 'clip')
-            use_ai_summary: Whether to generate a consolidated summary using an LLM.
-            db_path: Path to SQLite database (default: video_archive.db in current dir)
+            num_thumbnails: Number of thumbnail previews to extract
+            tag_language: Target language for tags (e.g., 'en', 'de', 'fr')
+            tag_stopwords: Custom stopwords to filter
+            model_name: Multimodal model ('llava', 'llava-large', 'blip2', 'instructblip')
+            db_path: Path to SQLite database
             enable_audio: Whether to transcribe and summarize audio
-            whisper_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
-            language: Language for transcription ('en', 'de', etc.) or None for auto-detect
+            whisper_model: Whisper model size
+            language: Language for transcription or None for auto-detect
+            no_pre_detect: Disable language pre-detection
         """
         self.extractor = FrameExtractor(num_frames=num_frames, num_thumbnails=num_thumbnails)
 
+        # Initialize with new multimodal analyzer (no need for separate LLM config)
         self.analyzer = AIAnalyzer(
             model_name=model_name,
             tag_language=tag_language,
-            summary_prompt_template=summary_prompt_template,
-            summary_llm_model=summary_llm_model,
-            summary_context_window=summary_context_window,
             stopwords=tag_stopwords
         )
         
-        self.use_ai_summary = use_ai_summary
         # Audio analysis (optional)
         self.enable_audio = enable_audio
         if enable_audio:
@@ -71,7 +69,7 @@ class VideoTagger:
         else:
             self.audio_analyzer = None
         
-        # Set database path - if not specified, use same directory as input or current dir
+        # Set database path
         if db_path is None:
             db_path = "video_archive.db"
         self.db = DatabaseHandler(db_path)
@@ -131,20 +129,17 @@ class VideoTagger:
             return None
         
         # Step 3: Extract thumbnail previews
-        print("\n[3/6] Extracting thumbnail previews...")
+        print("\n[3/5] Extracting thumbnail previews...")
         try:
             thumbnails = self.extractor.extract_thumbnails(video_path)
         except Exception as e:
             print(f"Warning: Could not extract thumbnails: {e}")
             thumbnails = []
         
-        # Step 4: Analyze frames with AI
-        print("\n[4/6] Analyzing frames with AI...")
+        # Step 4: Analyze frames with AI (multimodal LLM does everything)
+        print("\n[4/5] Analyzing frames with multimodal AI...")
         try:
             analysis = self.analyzer.analyze_frames(frames)
-
-            print(f"  Generated {len(analysis['tags'])} tags")
-            print(f"  Generated description: {analysis['descriptions'][0][:50]}...")
         except Exception as e:
             print(f"Error analyzing frames: {e}")
             return None
@@ -159,36 +154,33 @@ class VideoTagger:
         }
         
         if self.enable_audio:
-            print("\n[5/6] Analyzing audio (transcription & summary)...")
+            print("\n[5/5] Analyzing audio (transcription)...")
             try:
                 audio_result = self.audio_analyzer.analyze_video_audio(
                     video_path,
-                    summarize=True
+                    summarize=False  # We'll use our multimodal LLM for summary
                 )
             except Exception as e:
                 print(f"Warning: Audio analysis failed: {e}")
         else:
-            print("\n[5/6] Skipping audio analysis (use --audio to enable)")
+            print("\n[5/5] Skipping audio analysis (use --audio to enable)")
         
-        # --- AI Summary & Tag Generation ---
+        # Generate consolidated AI summary using multimodal LLM
+        print("\n[6/6] Generating consolidated AI summary...")
+        ai_summary_result = self.analyzer.generate_ai_summary_and_tags(
+            visual_descriptions=analysis['descriptions'],
+            audio_transcript=audio_result.get('transcript', ''),
+            language=self.analyzer.tag_language
+        )
+        
         ai_summary_text = ''
-        if self.use_ai_summary:
-            print("\n[6/7] Generating consolidated AI summary and tags...")
-            lang_map = {'en': 'English', 'de': 'German', 'fr': 'French', 'es': 'Spanish'}
-            target_language_name = lang_map.get(self.analyzer.tag_language, 'English')
-
-            ai_summary_result = self.analyzer.generate_ai_summary_and_tags(
-                visual_descriptions=analysis['descriptions'],
-                audio_transcript=audio_result.get('transcript', ''),
-                language=target_language_name
-            )
-            if ai_summary_result:
-                # Store the new summary and overwrite the tags with the higher-quality ones
-                ai_summary_text = ai_summary_result['summary']
-                analysis['tags'] = ai_summary_result['tags']
-        else:
-            print("\n[6/7] Skipping consolidated AI summary generation")
-
+        if ai_summary_result:
+            ai_summary_text = ai_summary_result['summary']
+            # Merge AI-generated tags with frame tags
+            analysis['tags'] = sorted(list(set(analysis['tags'] + ai_summary_result['tags'])))
+            print(f"  Summary: {ai_summary_text[:100]}...")
+            print(f"  Final tag count: {len(analysis['tags'])}")
+        
         # Step 7: Store everything in database
         print("\n[7/7] Storing in database...")
         
@@ -208,7 +200,7 @@ class VideoTagger:
             'has_speech': audio_result['has_speech'],
             'transcript': audio_result['transcript'],
             'transcript_summary': audio_result['summary'],
-            'ai_summary': ai_summary_text, # Store the new AI summary here
+            'ai_summary': ai_summary_text,
             'audio_language': audio_result['language'],
             'word_count': audio_result['word_count']
         }
@@ -232,7 +224,7 @@ class VideoTagger:
         # Print results
         print(f"\n✓ Successfully processed and stored in database!")
         print(f"  Video ID: {video_id}")
-        print(f"  Tags: {', '.join(result['tags'])}")
+        print(f"  Tags: {', '.join(result['tags'][:10])}...")
         print(f"  Thumbnails: {len(thumbnails)} stored")
         if audio_result['has_speech']:
             print(f"  Audio: {audio_result['word_count']} words transcribed ({audio_result['language']})")
@@ -300,16 +292,7 @@ class VideoTagger:
             print(f"  Total words transcribed: {stats['total_words_transcribed']:,}")
     
     def search_by_tag(self, tag: str, limit: int = 50) -> List[Dict]:
-        """
-        Search for videos containing a specific tag
-        
-        Args:
-            tag: Tag to search for
-            limit: Maximum results
-            
-        Returns:
-            List of matching video metadata
-        """
+        """Search for videos containing a specific tag"""
         return self.db.search_videos(tags=[tag.lower()], limit=limit)
     
     def show_statistics(self):
@@ -344,36 +327,25 @@ class VideoTagger:
 
 def main():
     """Main entry point"""
-    # Suppress the specific UserWarning from PyTorch about TypedStorage
-    # This is a known issue in certain versions of torch/transformers and is safe to ignore
-    warnings.filterwarnings(
-        "ignore",
-        message="TypedStorage is deprecated"
-    )
-
-    # Suppress the FutureWarning from huggingface_hub about resume_download
-    warnings.filterwarnings(
-        "ignore",
-        message="`resume_download` is deprecated",
-        category=FutureWarning
-    )
+    warnings.filterwarnings("ignore", message="TypedStorage is deprecated")
+    warnings.filterwarnings("ignore", message="`resume_download` is deprecated", category=FutureWarning)
 
     parser = argparse.ArgumentParser(
-        description="Automatically tag videos using AI and store in SQLite database",
+        description="Automatically tag videos using multimodal AI and store in SQLite database",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Process single video
+  # Process single video with LLaVA (default)
   python video_tagger.py video.mp4
   
   # Process with audio transcription
   python video_tagger.py video.mp4 --audio
   
-  # Process directory (creates video_archive.db in current dir)
-  python video_tagger.py /path/to/videos --recursive
+  # Use different model
+  python video_tagger.py video.mp4 --model blip2
   
-  # Use custom database location
-  python video_tagger.py video.mp4 --db /path/to/archive.db
+  # Process directory with German tags
+  python video_tagger.py /path/to/videos --recursive --language de
   
   # Search for videos
   python video_tagger.py . --search outdoor
@@ -382,154 +354,89 @@ Examples:
   python video_tagger.py . --stats
         """
     )
-    parser.add_argument(
-        'input',
-        nargs='?',
-        default='.',
-        help='Video file or directory to process (default: current directory)'
-    )
-    parser.add_argument(
-        '--frames',
-        type=int,
-        default=8,
-        help='Number of frames to extract per video (default: 8)'
-    )
+    parser.add_argument('input', nargs='?', default='.', help='Video file or directory')
+    parser.add_argument('--frames', type=int, default=8, help='Number of frames to extract (default: 8)')
     parser.add_argument(
         '--model',
-        choices=['blip', 'blip2', 'clip'],
-        default='blip',
-        help='AI model to use (default: blip)'
+        choices=['llava', 'llava-large', 'blip2', 'instructblip'],
+        default='llava',
+        help='Multimodal AI model (default: llava)'
     )
-    parser.add_argument(
-        '--db',
-        help='SQLite database path (default: video_archive.db in current directory)'
-    )
-    parser.add_argument(
-        '--audio',
-        action='store_true',
-        help='Enable audio transcription and summarization (requires Whisper)'
-    )
-    parser.add_argument(
-        '--whisper-model',
-        choices=['tiny', 'base', 'small', 'medium', 'large'],
-        default='base',
-        help='Whisper model size for transcription (default: base)'
-    )
-    parser.add_argument(
-        '--language',
-        type=str,
-        default='de',
-        help='Force transcription language (default: de). Use a comma-separated list like "de,en" to enable pre-detection within that list.'
-    )
-    parser.add_argument(
-        '--recursive',
-        action='store_true',
-        help='Process subdirectories recursively'
-    )
-    parser.add_argument(
-        '--force',
-        action='store_true',
-        help='Force reprocessing of already tagged videos'
-    )
-    parser.add_argument(
-        '--search',
-        help='Search videos by tag'
-    )
-    parser.add_argument(
-        '--stats',
-        action='store_true',
-        help='Show database statistics'
-    )
-    
-    parser.add_argument(
-        '--config',
-        help='Path to a JSON configuration file'
-    )
+    parser.add_argument('--language', type=str, default='en', help='Tag language (default: en)')
+    parser.add_argument('--db', help='SQLite database path')
+    parser.add_argument('--audio', action='store_true', help='Enable audio transcription')
+    parser.add_argument('--whisper-model', choices=['tiny', 'base', 'small', 'medium', 'large'],
+                       default='base', help='Whisper model size (default: base)')
+    parser.add_argument('--audio-language', type=str, help='Force audio transcription language')
+    parser.add_argument('--recursive', action='store_true', help='Process subdirectories')
+    parser.add_argument('--force', action='store_true', help='Force reprocessing')
+    parser.add_argument('--search', help='Search videos by tag')
+    parser.add_argument('--stats', action='store_true', help='Show database statistics')
+    parser.add_argument('--config', help='Path to JSON configuration file')
     
     args = parser.parse_args()
     
-    # Determine database path
-    db_path = args.db
-    if db_path is None:
-        # If processing a directory, put DB in that directory
-        if Path(args.input).is_dir():
-            db_path = str(Path(args.input) / "video_archive.db")
-        else:
-            # If processing a file, put DB in same directory as file
-            db_path = str(Path(args.input).parent / "video_archive.db")
-    
-    # --- Configuration Loading ---
+    # Load configuration if provided
     config = {}
     if args.config:
         try:
             with open(args.config, 'r') as f:
                 config = json.load(f)
+            print(f"Loaded configuration from: {args.config}")
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Warning: Could not load or parse config file '{args.config}': {e}")
-
-    # --- AI Summary settings ---
-    ai_summary_config = config.get('ai_summary', {})
-    use_ai_summary = ai_summary_config.get('use_ai_summary', False)
-    summary_llm_model = ai_summary_config.get('summary_llm_model', 'mistralai/Mistral-7B-Instruct-v0.2')
-    summary_context_window = ai_summary_config.get('context_window_size', 512)
+            print(f"Warning: Could not load config file: {e}")
     
-    # Load prompt from file
-    summary_prompt_template = None
-    prompt_file_path = ai_summary_config.get('prompt_file')
-    if prompt_file_path:
-        try:
-            with open(prompt_file_path, 'r', encoding='utf-8') as f:
-                summary_prompt_template = f.read()
-            print(f"Loaded AI summary prompt from '{prompt_file_path}'")
-        except FileNotFoundError:
-            print(f"Warning: Prompt file not found at '{prompt_file_path}'. Using default prompt.")
-
-
-    # Combine settings: CLI > config file > defaults
+    # Determine database path - CLI > config > auto
+    db_path = args.db or config.get('database', {}).get('path')
+    if db_path is None:
+        if Path(args.input).is_dir():
+            db_path = str(Path(args.input) / "video_archive.db")
+        else:
+            db_path = str(Path(args.input).parent / "video_archive.db")
+    
+    # Combine settings: CLI arguments override config file, which overrides defaults
     # Processing settings
-    num_frames = args.frames if args.frames != 8 else config.get('processing', {}).get('num_frames', 8)
-    num_thumbnails = config.get('processing', {}).get('num_thumbnails', 5)
-    model_name = args.model if args.model != 'blip' else config.get('processing', {}).get('model_name', 'blip')
-    recursive = args.recursive or config.get('processing', {}).get('recursive_search', False)
-    force = args.force or config.get('processing', {}).get('force_reprocess', False)
-
+    processing_config = config.get('processing', {})
+    num_frames = args.frames if args.frames != 8 else processing_config.get('num_frames', 8)
+    num_thumbnails = processing_config.get('num_thumbnails', 5)
+    recursive = args.recursive or processing_config.get('recursive_search', False)
+    force = args.force or processing_config.get('force_reprocess', False)
+    
+    # Model settings
+    model_config = config.get('model', {})
+    model_name = args.model if args.model != 'llava' else model_config.get('name', 'llava')
+    
     # Tag settings
     tag_config = config.get('tags', {})
-    tag_language = tag_config.get('language', 'en')
+    tag_language = args.language if args.language != 'en' else tag_config.get('language', 'en')
     tag_stopwords = tag_config.get('stopwords', None)
-
+    
     # Audio settings
     audio_config = config.get('audio', {})
     enable_audio = args.audio or audio_config.get('enabled', False)
     whisper_model = args.whisper_model if args.whisper_model != 'base' else audio_config.get('whisper_model', 'base')
-    audio_language = args.language if args.language != 'de' else audio_config.get('language', 'de')
-    no_pre_detect = config.get('audio', {}).get('no_pre_detect', False)
+    audio_language = args.audio_language or audio_config.get('language')
+    no_pre_detect = audio_config.get('no_pre_detect', False)
 
-    # Create tagger instance
+    # Create tagger instance with simplified config (no more separate LLM settings!)
     tagger = VideoTagger(
         num_frames=num_frames,
         num_thumbnails=num_thumbnails,
         model_name=model_name,
+        tag_language=tag_language,
+        tag_stopwords=tag_stopwords,
         db_path=db_path,
         enable_audio=enable_audio,
         whisper_model=whisper_model,
         language=audio_language,
-        tag_language=tag_language,
-        tag_stopwords=tag_stopwords,
-        summary_prompt_template=summary_prompt_template,
-        summary_llm_model=summary_llm_model,
-        summary_context_window=summary_context_window,
-        no_pre_detect=no_pre_detect,
-        use_ai_summary=use_ai_summary
+        no_pre_detect=no_pre_detect
     )
     
     try:
-        # Statistics mode
         if args.stats:
             tagger.show_statistics()
             return
         
-        # Search mode
         if args.search:
             results = tagger.search_by_tag(args.search)
             print(f"\nFound {len(results)} video(s) with tag '{args.search}':")
@@ -538,22 +445,16 @@ Examples:
                 print(f"\n{video['file_name']}")
                 print(f"  Path: {video['file_path']}")
                 print(f"  Duration: {video['duration_seconds']:.1f}s")
-                print(f"  Date: {video['parsed_datetime'] or video['file_modified_date']}")
-                
-                # Get tags
                 video_id = video['id']
                 full_info = tagger.db.get_video_with_tags(video_id)
-                print(f"  Tags: {', '.join(full_info['tags'])}")
+                print(f"  Tags: {', '.join(full_info['tags'][:10])}...")
             return
         
-        # Check if input is file or directory
         input_path = Path(args.input)
         
         if input_path.is_file():
-            # Process single video
             tagger.process_video(str(input_path), force=force)
         elif input_path.is_dir():
-            # Process directory
             tagger.process_directory(str(input_path), recursive=recursive, force=force)
         else:
             print(f"Error: {args.input} is not a valid file or directory")

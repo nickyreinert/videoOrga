@@ -60,7 +60,6 @@ class AIAnalyzer:
             'llava-large': 'llava-hf/llava-1.5-13b-hf',
             'blip2': 'Salesforce/blip2-opt-2.7b',
             'instructblip': 'Salesforce/instructblip-vicuna-7b',
-            # Old model names - map to multimodal equivalents
             'blip': 'llava-hf/llava-1.5-7b-hf',  # Default to llava
             'clip': 'llava-hf/llava-1.5-7b-hf',
         }
@@ -187,11 +186,6 @@ ASSISTANT: Tags:""",
             'caption': f"""USER: <image>
 Describe this video frame in one concise sentence{lang_instruction}.
 ASSISTANT:""",
-            
-            'detailed': f"""USER: <image>
-Provide a detailed description of this video frame{lang_instruction}.
-Include: main subjects, actions, setting, notable objects, colors, composition, and mood.
-ASSISTANT:"""
         }
         
         return prompts.get(task, prompts['tags'])
@@ -210,6 +204,8 @@ ASSISTANT:"""
         self.load_model()
         
         prompt = self._build_prompt(task)
+
+        print(f"Prompt for task '{task}': {prompt}...")
         
         # Process inputs
         inputs = self.processor(
@@ -226,13 +222,11 @@ ASSISTANT:"""
                 do_sample=False
             )
         
-        # Decode
-        result = self.processor.decode(outputs[0], skip_special_tokens=True)
-        
-        # Remove prompt from output
-        for prompt_part in [prompt, "USER:", "ASSISTANT:", "<image>"]:
-            result = result.replace(prompt_part, "")
-        
+        # Decode only the newly generated tokens
+        input_token_len = inputs.input_ids.shape[1]
+        result = self.processor.decode(outputs[0][input_token_len:], skip_special_tokens=True)
+                
+        # The result is already clean, but we can strip just in case
         return result.strip()
 
     def analyze_frames(self, frames: List[Image.Image]) -> Dict:
@@ -250,6 +244,7 @@ ASSISTANT:"""
         descriptions = []
         all_tags = set()
         
+        print(f"Analyzing {len(frames)} frames in language '{self.tag_language}'...")
         for i, frame in enumerate(frames):
             print(f"  Analyzing frame {i+1}/{len(frames)}...")
             
@@ -268,7 +263,7 @@ ASSISTANT:"""
         final_tags = sorted(list(all_tags))
         
         print(f"  Generated {len(final_tags)} unique tags")
-        print(f"  Sample tags: {', '.join(final_tags['tags'][:5])}...")
+        print(f"  Sample tags: {', '.join(final_tags[:5])}...")
         print(f"  Description samples: {descriptions[0][:20]}...")
 
         return {

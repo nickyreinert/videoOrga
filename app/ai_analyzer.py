@@ -171,24 +171,6 @@ class AIAnalyzer:
             self.device = next(self.model.parameters()).device
             print(f"Model is on device: {self.device}")
 
-    def _build_prompt(self, task: str) -> str:
-        """Build prompt for specific task"""
-        lang_name = self.lang_names.get(self.tag_language, 'English')
-        lang_instruction = f" in {lang_name}" if self.tag_language != 'en' else ""
-        
-        prompts = {
-            'tags': f"""USER: <image>
-Generate relevant tags for this video frame{lang_instruction}.
-Output ONLY comma-separated keywords describing: main subjects, actions, setting, objects, colors, mood.
-Do not include any other text.
-ASSISTANT: Tags:""",
-            
-            'caption': f"""USER: <image>
-Describe this video frame in one concise sentence{lang_instruction}.
-ASSISTANT:""",
-        }
-        
-        return prompts.get(task, prompts['tags'])
 
     def analyze_frame(self, image: Image.Image, task: str = 'tags') -> str:
         """
@@ -203,10 +185,13 @@ ASSISTANT:""",
         """
         self.load_model()
         
-        prompt = self._build_prompt(task)
+        lang_name = self.lang_names.get(self.tag_language, 'English')
+        lang_instruction = f" in {lang_name}" if self.tag_language != 'en' else ""
 
-        print(f"Prompt for task '{task}': {prompt}...")
-        
+        prompt = f"""USER: <image>
+Describe this video frame in one concise sentence{lang_instruction}.
+ASSISTANT:"""
+
         # Process inputs
         inputs = self.processor(
             text=prompt,
@@ -251,24 +236,11 @@ ASSISTANT:""",
             # Get caption for this frame
             caption = self.analyze_frame(frame, task='caption')
             descriptions.append(caption)
-            
-            # Get tags for this frame
-            tags_str = self.analyze_frame(frame, task='tags')
-            
-            # Parse tags
-            tags = self._extract_tags_from_text(tags_str)
-            all_tags.update(tags)
-        
-        # Post-process tags
-        final_tags = sorted(list(all_tags))
-        
-        print(f"  Generated {len(final_tags)} unique tags")
-        print(f"  Sample tags: {', '.join(final_tags[:5])}...")
+                    
         print(f"  Description samples: {descriptions[0][:20]}...")
 
         return {
             'descriptions': descriptions,
-            'tags': final_tags,
             'frame_count': len(frames)
         }
 
@@ -282,21 +254,14 @@ ASSISTANT:""",
         Returns:
             List of cleaned tags
         """
-        # Remove common prefixes
-        text = re.sub(r'^\s*(tags:|keywords:)\s*', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'^\s*(a photograph of|a picture of|a close up of|an image of)\s*', '', text, flags=re.IGNORECASE)
         
-        # Split by comma and clean
-        tags = [tag.strip().lower() for tag in text.split(',')]
-        
-        # Also extract words if format isn't comma-separated
-        if len(tags) <= 1:
-            words = re.findall(r'\b[a-zA-Z\u00C0-\u017F]+\b', text.lower())
-            tags = words
+        # only keep letters and spaces
+        text = re.sub(r'[^a-z ]+', ' ', text.lower())
+        pre_tags = [tag for tag in text.split(' ')]
         
         # Filter out empty, short, and stopword tags
         tags = [
-            tag for tag in tags 
+            tag for tag in pre_tags 
             if tag and len(tag) > 2 and tag not in self.stopwords
         ]
         
@@ -318,7 +283,7 @@ ASSISTANT:""",
         self.load_model()
         
         lang_name = self.lang_names.get(self.tag_language, 'English')
-        lang_instruction = f" in {lang_name}" if self.tag_language != 'en' else ""
+        lang_instruction = f" strictly in {lang_name}" if self.tag_language != 'en' else ""
         
         # Combine visual descriptions
         unique_descriptions = sorted(list(set(visual_descriptions)))
@@ -336,7 +301,7 @@ ASSISTANT:""",
 The video shows:
 {visual_context}{audio_section}
 
-Provide a concise summary paragraph.
+Provide a concise summary paragraph{lang_instruction}.
 ASSISTANT:"""
         
         # Generate summary
@@ -354,7 +319,6 @@ ASSISTANT:"""
             )
         
         summary = self.processor.decode(outputs[0], skip_special_tokens=True)
-        
         # Clean up output
         for prompt_part in [prompt, "USER:", "ASSISTANT:"]:
             summary = summary.replace(prompt_part, "")
@@ -383,19 +347,10 @@ ASSISTANT:"""
             # Generate summary
             summary = self.generate_video_summary(visual_descriptions, audio_transcript)
             
-            # Extract tags from all descriptions
-            all_tags = set()
-            for desc in visual_descriptions:
-                tags = self._extract_tags_from_text(desc)
-                all_tags.update(tags)
+            # extract tags from summary
+            tags = self._extract_tags_from_text(summary)
             
-            # If we have audio, extract keywords from it too
-            if audio_transcript:
-                words = re.findall(r'\b[a-zA-Z]{4,}\b', audio_transcript.lower())
-                audio_tags = [w for w in words if w not in self.stopwords][:10]
-                all_tags.update(audio_tags)
-            
-            tags = sorted(list(all_tags))[:20]
+            tags = sorted(list(tags))[:20]
             
             print(f"  Generated summary ({len(summary)} chars)")
             print(f"  Generated {len(tags)} tags")

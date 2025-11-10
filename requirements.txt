@@ -29,6 +29,7 @@ humanize>=4.8.0
 sentencepiece>=0.2.0
 
 sacremoses
+nltk
 
 # Note: FFmpeg must be installed on your system for audio extraction
 # Linux: sudo apt install ffmpeg

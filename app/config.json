@@ -13,7 +13,7 @@
 
     "processing": {
         "_description": "Settings for video processing and frame analysis.",
-        "num_frames": 1,
+        "num_frames": 12,
         "num_thumbnails": 5,
         "model_name": "blip",
         "force_reprocess": true,
@@ -29,7 +29,7 @@
     "audio": {
         "_description": "Settings for audio transcription with Whisper.",
         "enabled": true,
-        "whisper_model": "tiny",
+        "whisper_model": "medium",
         "language": "de,en",
         "no_pre_detect": true
     }

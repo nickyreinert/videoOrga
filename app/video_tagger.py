@@ -177,9 +177,8 @@ class VideoTagger:
         if ai_summary_result:
             ai_summary_text = ai_summary_result['summary']
             # Merge AI-generated tags with frame tags
-            analysis['tags'] = sorted(list(set(analysis['tags'] + ai_summary_result['tags'])))
+            analysis['tags'] = ai_summary_result['tags']
             print(f"  Summary: {ai_summary_text[:100]}...")
-            print(f"  Final tag count: {len(analysis['tags'])}")
         
         # Step 7: Store everything in database
         print("\n[7/7] Storing in database...")

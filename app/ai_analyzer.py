@@ -186,7 +186,7 @@ class AIAnalyzer:
         self.load_model()
         
         lang_name = self.lang_names.get(self.tag_language, 'English')
-        lang_instruction = f" in {lang_name}" if self.tag_language != 'en' else ""
+        lang_instruction = f" strictly in {lang_name}" if self.tag_language != 'en' else ""
 
         prompt = f"""USER: <image>
 Describe this video frame in one concise sentence{lang_instruction}.

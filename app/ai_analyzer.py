@@ -66,18 +66,44 @@ class AIAnalyzer:
         
         # Setup stopwords
         self.stopwords = set()
+        
+        # 1. Load NLTK stopwords if available
         if NLTK_AVAILABLE:
             try:
                 lang_map = {'en': 'english', 'de': 'german', 'fr': 'french', 'es': 'spanish'}
                 if self.tag_language in lang_map:
                     self.stopwords.update(nltk_stopwords.words(lang_map[self.tag_language]))
-                    print(f"Loaded {len(self.stopwords)} stopwords from NLTK for language '{self.tag_language}'.")
+                    print(f"Loaded {len(self.stopwords)} NLTK stopwords for language '{self.tag_language}'.")
             except Exception as e:
                 print(f"Warning: Could not load NLTK stopwords for '{self.tag_language}': {e}")
         
+        # 2. Add common verb stopwords (often missed by standard lists)
+        COMMON_VERBS_EN = [
+            'is', 'are', 'was', 'were', 'has', 'have', 'had', 'do', 'does', 'did',
+            'can', 'could', 'should', 'would', 'will', 'shall', 'may', 'might',
+            'must', 'got', 'getting', 'gotten', 'needs', 'need', 'like', 'likes',
+            'going', 'want', 'wants', 'make', 'makes', 'made', 'see', 'sees', 'saw',
+            'look', 'looks', 'looking'
+        ]
+        
+        COMMON_VERBS_DE = [
+            'ist', 'sind', 'war', 'waren', 'hat', 'haben', 'hatte', 'tun', 'tut',
+            'täte', 'kann', 'konnte', 'soll', 'sollte', 'würde', 'wird', 'wurde',
+            'muss', 'braucht', 'brauchen', 'möchte', 'möchten', 'gibt', 'geben',
+            'geht', 'gehen', 'sieht', 'sehen', 'sah', 'macht', 'machen', 'gemacht',
+            'lässt', 'lassen', 'kommt', 'kommen', 'kam', 'steht', 'stehen', 'stand',
+            'liegt', 'liegen', 'lag', 'sitzt', 'sitzen', 'saß'
+        ]
+        
+        if self.tag_language == 'en':
+            self.stopwords.update(COMMON_VERBS_EN)
+        elif self.tag_language == 'de':
+            self.stopwords.update(COMMON_VERBS_DE)
+            
+        # 3. Merge custom stopwords
         if stopwords:
             self.stopwords.update(stopwords)
-        
+            
         # Language name mapping for prompts
         self.lang_names = {
             'en': 'English',
@@ -93,8 +119,7 @@ class AIAnalyzer:
         print(f"AI Analyzer initialized (model: {model_name}, device: {self.device})")
         if self.tag_language != 'en':
             print(f"Tag language set to: {self.tag_language.upper()}")
-        if self.stopwords:
-            print(f"Stopword removal enabled ({len(self.stopwords)} words)")
+        print(f"Stopword removal enabled ({len(self.stopwords)} words)")
 
     def _setup_device(self, device: str) -> str:
         """Determine the best device to use"""
@@ -243,7 +268,7 @@ ASSISTANT:"""
             'descriptions': descriptions,
             'frame_count': len(frames)
         }
-
+    
     def _extract_tags_from_text(self, text: str) -> List[str]:
         """
         Extract and clean tags from text
@@ -254,18 +279,65 @@ ASSISTANT:"""
         Returns:
             List of cleaned tags
         """
+        # Strip trailing numbers in parentheses like "(1)", "(2)" before processing
+        text = re.sub(r'\s*\(\d+\)\s*', ' ', text)
         
         # only keep letters and spaces
         text = re.sub(r'[^a-z ]+', ' ', text.lower())
         pre_tags = [tag for tag in text.split(' ')]
         
         # Filter out empty, short, and stopword tags
-        tags = [
-            tag for tag in pre_tags 
-            if tag and len(tag) > 2 and tag not in self.stopwords
-        ]
+        tags = []
+        for tag in pre_tags:
+            # Basic filtering: length > 2
+            if not tag or len(tag) <= 2:
+                continue
+            
+            # Max length check (prevent malicious/corrupted tags)
+            if len(tag) > 30:
+                continue
+                
+            # Stopword filtering
+            if tag in self.stopwords:
+                continue
+                
+            # Check for repeated characters (e.g. "nnn")
+            if len(set(tag)) == 1:
+                continue
+            
+            # Detect repeated substring patterns (e.g., "taschentaschentasche...")
+            if self._has_repeated_pattern(tag):
+                continue
+                
+            tags.append(tag)
         
         return tags
+    
+    def _has_repeated_pattern(self, text: str) -> bool:
+        """
+        Detect if a string has a repeated substring pattern
+        
+        Args:
+            text: String to check
+            
+        Returns:
+            True if repeated pattern detected, False otherwise
+        """
+        # Check for patterns of length 3 to len(text)//2
+        for pattern_len in range(3, len(text) // 2 + 1):
+            pattern = text[:pattern_len]
+            # Count how many times this pattern appears at the start
+            count = 0
+            pos = 0
+            while pos < len(text) and text[pos:pos+pattern_len] == pattern:
+                count += 1
+                pos += pattern_len
+            
+            # If pattern repeats 3+ times and covers most of the string, it's suspicious
+            if count >= 3 and pos >= len(text) * 0.7:
+                return True
+        
+        return False
 
     def generate_video_summary(self, 
                                visual_descriptions: List[str],

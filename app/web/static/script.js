@@ -248,6 +248,36 @@ function renderGridView(paginatedVideos, viewType = 'grid') {
     }).join('');
 }
 
+function renderSuperCompactView(paginatedVideos) {
+    const grid = document.getElementById('video-grid');
+    grid.className = 'row g-2 super-compact-view';
+
+    grid.innerHTML = paginatedVideos.map(video => {
+        const thumbnails = video.thumbnail_data || [];
+        const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
+
+        return `
+        <div class="video-item col-6 col-sm-4 col-md-3 col-lg-2">
+            <div class="card h-100 border-0 shadow-sm" style="cursor: pointer;" onclick='openVideoDetailModal(${video.id})'>
+                ${firstThumbnail
+                    ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
+                           class="card-img-top rounded" 
+                           alt="${video.file_name}" 
+                           title="${video.file_name}" 
+                           data-thumbnails='${JSON.stringify(thumbnails)}' 
+                           onmouseenter="startThumbnailCycle(this)" 
+                           onmouseleave="stopThumbnailCycle(this)" 
+                           style="aspect-ratio: 16/9; object-fit: cover;">`
+                    : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center rounded" 
+                            style="aspect-ratio: 16/9;">
+                            <i class="fas fa-video fa-2x"></i>
+                       </div>`
+                }
+            </div>
+        </div>`;
+    }).join('');
+}
+
 function sortVideos(key) {
     if (sortState.key === key) {
         sortState.order = sortState.order === 'asc' ? 'desc' : 'asc';
@@ -277,6 +307,8 @@ function renderPage(viewType = null) {
 
     if (selectedView === 'list') {
         renderListView(paginatedVideos);
+    } else if (selectedView === 'super-compact') {
+        renderSuperCompactView(paginatedVideos);
     } else {
         // 'grid' or 'compact'
         renderGridView(paginatedVideos, selectedView);

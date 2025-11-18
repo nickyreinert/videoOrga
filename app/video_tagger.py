@@ -322,6 +322,60 @@ class VideoTagger:
         if self.audio_analyzer:
             self.audio_analyzer.cleanup()
         self.db.close()
+    
+    def fix_all_tags(self):
+        """
+        Reprocess tags for all videos in the database using improved filtering.
+        Does NOT re-analyze videos - just re-extracts tags from existing summaries/descriptions.
+        """
+        print(f"\n{'='*60}")
+        print("Fixing tags for all videos...")
+        print(f"{'='*60}\n")
+        
+        # Get all videos from database
+        self.db.cursor.execute("SELECT id, ai_summary, description FROM videos ORDER BY id")
+        videos = self.db.cursor.fetchall()
+        
+        if not videos:
+            print("No videos found in database.")
+            return
+        
+        print(f"Found {len(videos)} video(s) to fix...\n")
+        
+        fixed_count = 0
+        for video in videos:
+            video_id, ai_summary, description = video
+            
+            # Extract tags from summary (preferred) or description
+            text_source = ai_summary if ai_summary else (description if description else "")
+            
+            if not text_source:
+                print(f"  Video ID {video_id}: No summary or description to extract from, skipping")
+                continue
+            
+            # Re-extract tags using improved filtering
+            new_tags = self.analyzer._extract_tags_from_text(text_source)
+            
+            if new_tags:
+                # Delete old tags
+                self.db.cursor.execute("DELETE FROM tags WHERE video_id = ?", (video_id,))
+                
+                # Insert new tags
+                self.db.insert_tags(video_id, new_tags)
+                
+                fixed_count += 1
+                print(f"  Video ID {video_id}: Updated {len(new_tags)} tags")
+            else:
+                print(f"  Video ID {video_id}: No valid tags extracted")
+        
+        self.db.conn.commit()
+        
+        print(f"\n{'='*60}")
+        print(f"Tag fixing complete!")
+        print(f"{'='*60}")
+        print(f"Videos processed: {len(videos)}")
+        print(f"Tags updated: {fixed_count}")
+        print(f"Skipped: {len(videos) - fixed_count}")
 
 
 def main():
@@ -371,6 +425,7 @@ Examples:
     parser.add_argument('--force', action='store_true', help='Force reprocessing')
     parser.add_argument('--search', help='Search videos by tag')
     parser.add_argument('--stats', action='store_true', help='Show database statistics')
+    parser.add_argument('--fix-tags', action='store_true', help='Reprocess tags for all videos (no re-analysis)')
     parser.add_argument('--config', help='Path to JSON configuration file')
     
     args = parser.parse_args()
@@ -434,6 +489,10 @@ Examples:
     try:
         if args.stats:
             tagger.show_statistics()
+            return
+        
+        if args.fix_tags:
+            tagger.fix_all_tags()
             return
         
         if args.search:

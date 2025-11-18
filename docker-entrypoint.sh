@@ -90,6 +90,7 @@ case "$1" in
 serve)
     echo "Launching server..."
     $PY -c "import torch, numpy; print('PyTorch:', torch.__version__, 'CUDA:', torch.cuda.is_available(), 'NumPy:', numpy.__version__)"
+    echo "Application is running on port http://localhost:5000"
     wait_for_gpu
     init_database
     $PY web/app.py

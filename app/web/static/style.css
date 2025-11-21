@@ -1,122 +1,102 @@
 .tag-cloud {
-    \r\n display: flex;
-    \r\n flex-wrap: wrap;
-    \r\n gap: 0.5rem;
-    \r\n
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
-\r\n\r\n.tag-cloud .tag {
-    \r\n cursor: pointer;
-    \r\n padding: 0.25rem 0.5rem;
-    \r\n border-radius: 0.25rem;
-    \r\n background-color: #e9ecef;
-    \r\n transition: background-color 0.2s;
-    \r\n
+.tag-cloud .tag {
+    cursor: pointer;
+    padding: 0.25rem 0.75rem;
+    border-radius: 50rem;
+    background-color: #e9ecef;
+    transition: background-color 0.2s;
+    font-size: 0.875rem;
 }
 
-\r\n\r\n.tag-cloud .tag.selected {
-    \r\n background-color: #0d6efd;
-    \r\n color: white;
-    \r\n
+.tag-cloud .tag:hover {
+    background-color: #dee2e6;
 }
 
-\r\n\r\n.card-img-top {
-    \r\n height: 200px;
-    \r\n object-fit: cover;
-    \r\n
+.tag-cloud .tag.selected {
+    background-color: #0d6efd;
+    color: white;
 }
 
-\r\n\r\n.video-item {
-    \r\n transition: transform 0.2s;
-    \r\n
+.card-img-top {
+    height: 200px;
+    object-fit: cover;
 }
 
-\r\n\r\n.video-item:hover {
-    \r\n transform: translateY(-5px);
-    \r\n
+.video-item {
+    transition: transform 0.2s;
 }
 
-\r\n\r\n.tags .badge {
-    \r\n cursor: pointer;
-    \r\n
+.video-item:hover {
+    transform: translateY(-5px);
 }
 
-\r\n\r\n#currentTags {
-    \r\n display: flex;
-    \r\n flex-wrap: wrap;
-    \r\n gap: 0.5rem;
-    \r\n
+.tags .badge {
+    cursor: pointer;
 }
 
-\r\n\r\n#currentTags .badge {
-    \r\n cursor: pointer;
-    \r\n font-size: 1rem;
-    \r\n padding: 0.5rem;
-    \r\n
+#currentTags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
-\r\n\r\n.video-tag {
-    \r\n cursor: pointer;
-    \r\n
+#currentTags .badge {
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.5rem;
 }
 
-\r\n\r\n.video-tag.bg-success {
-    \r\n border: 2px solid #198754;
-    \r\n box-shadow: 0 0 5px rgba(25, 135, 84, 0.5);
-    \r\n
+.video-tag {
+    cursor: pointer;
 }
 
-\r\n\r\n
+.video-tag.bg-success {
+    border: 2px solid #198754;
+    box-shadow: 0 0 5px rgba(25, 135, 84, 0.5);
+}
 
 /* Video Player Modal Styling */
-\r\n#videoPlayerModal .modal-dialog {
-    \r\n max-width: 90vw;
-    \r\n margin: 1.75rem auto;
-    \r\n
+#videoPlayerModal .modal-dialog {
+    max-width: 90vw;
+    margin: 1.75rem auto;
 }
 
-\r\n\r\n#videoPlayerModal .modal-content {
-    \r\n height: 85vh;
-    \r\n background-color: #000;
-    \r\n border: none;
-    \r\n
+#videoPlayerModal .modal-content {
+    height: 85vh;
+    background-color: #000;
+    border: none;
 }
 
-\r\n\r\n#videoPlayerModal .modal-body {
-    \r\n padding: 0;
-    \r\n height: 100%;
-    \r\n
+#videoPlayerModal .modal-body {
+    padding: 0;
+    height: 100%;
 }
 
-\r\n\r\n#main-video-player {
-    \r\n width: 100% !important;
-    \r\n height: 100% !important;
-    \r\n
+#main-video-player {
+    width: 100% !important;
+    height: 100% !important;
 }
-
-\r\n\r\n
 
 /* Super Compact View Styling */
-\r\n.super-compact-view .video-item {
-    \r\n padding: 0;
-    \r\n
+.super-compact-view .video-item {
+    padding: 0;
 }
 
-\r\n\r\n.super-compact-view .card {
-    \r\n transition: all 0.2s ease;
-    \r\n
+.super-compact-view .card {
+    transition: all 0.2s ease;
 }
 
-\r\n\r\n.super-compact-view .card:hover {
-    \r\n transform: scale(1.05);
-    \r\n box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
-    \r\n z-index: 10;
-    \r\n
+.super-compact-view .card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+    z-index: 10;
 }
 
-\r\n\r\n.super-compact-view .card-img-top {
-    \r\n height: auto;
-    \r\n
+.super-compact-view .card-img-top {
+    height: auto;
 }
-
-\r\n

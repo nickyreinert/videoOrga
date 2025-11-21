@@ -4,13 +4,12 @@ let selectedTags = [];
 let videos = [];
 let sortState = { key: 'creation_date', order: 'desc' };
 let currentPage = 1;
-let itemsPerPage = 12;
 let player = null;
 
 // Debounce function to limit how often a function can run
 function debounce(func, delay) {
     let timeout;
-    return function(...args) {
+    return function (...args) {
         const context = this;
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(context, args), delay);
@@ -23,11 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
         // Load tags for the tag cloud
         loadTags();
-        
+
         // Set up search input handler
         const searchInput = document.getElementById('search');
         searchInput.addEventListener('input', debounce(filterVideos, 300));
-        
+
         // Set up date filter handlers
         document.getElementById('start-date').addEventListener('change', filterVideos);
         document.getElementById('end-date').addEventListener('change', filterVideos);
@@ -59,7 +58,7 @@ async function loadTags() {
     try {
         const response = await fetch('/api/tags');
         const tags = await response.json();
-        
+
         const tagCloud = document.getElementById('tag-cloud');
         tagCloud.innerHTML = tags.map(tag => `
             <span class="tag ${selectedTags.includes(tag.tag_name) ? 'selected' : ''}" data-tag="${tag.tag_name}" onclick="toggleTag('${tag.tag_name}')">
@@ -79,15 +78,30 @@ function toggleTag(tagName) {
     } else {
         selectedTags.splice(index, 1);
     }
-    
+
     // Also re-render the main tag cloud to show selection state
     const tagCloud = document.getElementById('tag-cloud');
     tagCloud.querySelectorAll('.tag').forEach(tagSpan => {
         const currentTagName = tagSpan.dataset.tag;
         tagSpan.classList.toggle('selected', selectedTags.includes(currentTagName));
     });
-    
+
     filterVideos();
+}
+
+// Get items per page based on view type
+function getItemsPerPage(viewType) {
+    switch (viewType) {
+        case 'super-compact':
+            return 60;  // Show many more thumbnails
+        case 'compact':
+            return 24;  // More than grid but less than super compact
+        case 'list':
+            return 20;  // List view can show more
+        case 'grid':
+        default:
+            return 12;  // Standard grid view
+    }
 }
 
 // Filter videos based on current filters
@@ -95,14 +109,14 @@ async function filterVideos() {
     const search = document.getElementById('search').value;
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
-    
+
     // Build query parameters
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (startDate) params.append('start_date', startDate);
     if (endDate) params.append('end_date', endDate);
     selectedTags.forEach(tag => params.append('tags', tag));
-    
+
     try {
         const response = await fetch(`/api/videos?${params.toString()}`);
         videos = await response.json();
@@ -126,17 +140,17 @@ function updateVideoGrid() {
         <div class="col video-item" data-tags='${JSON.stringify(video.tags)}'>
             <div class="card h-100">
                 ${firstThumbnail
-                    ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
+                ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
                            class="card-img-top" alt="Thumbnail" 
                            data-thumbnails='${JSON.stringify(thumbnails)}' 
                            onmouseenter="startThumbnailCycle(this)" 
                            onmouseleave="stopThumbnailCycle(this)">`
-                    : `<div class="card-img-top bg-secondary text-white d-flex 
+                : `<div class="card-img-top bg-secondary text-white d-flex 
                            align-items-center justify-content-center" 
                            style="height: 200px;">
                            No Thumbnail
                        </div>`
-                }
+            }
                 <div class="card-body" onclick='openVideoDetailModal(${video.id})'>
                     <h5 class="card-title text-truncate" title="${video.file_name}">
                         ${video.file_name}
@@ -147,11 +161,11 @@ function updateVideoGrid() {
                         </small>
                     </p>
                     <div class="tags mb-2">
-                        ${(video.tags || []).map(tag => 
-                            `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" 
+                        ${(video.tags || []).map(tag =>
+                `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" 
                                   onclick="event.stopPropagation(); toggleTag('${tag}');">${tag}
                             </span>`
-                        ).join('')}
+            ).join('')}
                     </div>
                 </div>
                 <div class="card-footer">
@@ -176,7 +190,7 @@ function updateVideoGrid() {
 function renderListView(paginatedVideos) {
     const grid = document.getElementById('video-grid');
     grid.className = 'list-view'; // Remove col classes
-    
+
     grid.innerHTML = `
         <table class="table table-striped">
             <thead>
@@ -193,17 +207,17 @@ function renderListView(paginatedVideos) {
                     <tr>
                         <td>
                             ${video.thumbnail_data && video.thumbnail_data.length > 0
-                                ? `<img src="data:image/jpeg;base64,${video.thumbnail_data[0]}" 
+            ? `<img src="data:image/jpeg;base64,${video.thumbnail_data[0]}" 
                                        alt="Thumbnail" style="width: 100px; height: auto;">`
-                                : `<div style="width: 100px; height: 56px; background-color: #ccc;"></div>`
-                            }
+            : `<div style="width: 100px; height: 56px; background-color: #ccc;"></div>`
+        }
                         </td>
                         <td>${video.file_name}</td>
                         <td>${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</td>
                         <td>
-                            ${(video.tags || []).map(tag => 
-                                `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="toggleTag('${tag}')">${tag}</span>`
-                            ).join('')}
+                            ${(video.tags || []).map(tag =>
+            `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="toggleTag('${tag}')">${tag}</span>`
+        ).join('')}
                         </td>
                         <td>
                             <button class="btn btn-primary btn-sm" onclick="openVideo(${video.id})">Open</button>
@@ -229,9 +243,9 @@ function renderGridView(paginatedVideos, viewType = 'grid') {
         <div class="video-item ${colClass}">
             <div class="card h-100">
                 ${firstThumbnail
-                    ? `<img src="data:image/jpeg;base64,${firstThumbnail}" class="card-img-top" alt="Thumbnail" data-thumbnails='${JSON.stringify(thumbnails)}' onmouseenter="startThumbnailCycle(this)" onmouseleave="stopThumbnailCycle(this)">`
-                    : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 150px;">No Thumbnail</div>`
-                }
+                ? `<img src="data:image/jpeg;base64,${firstThumbnail}" class="card-img-top" alt="Thumbnail" data-thumbnails='${JSON.stringify(thumbnails)}' onmouseenter="startThumbnailCycle(this)" onmouseleave="stopThumbnailCycle(this)">`
+                : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 150px;">No Thumbnail</div>`
+            }
                 <div class="card-body" onclick='openVideoDetailModal(${video.id})'>
                     <h5 class="card-title text-truncate" title="${video.file_name}">${video.file_name}</h5>
                     <p class="card-text"><small class="text-muted">${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</small></p>
@@ -260,7 +274,7 @@ function renderSuperCompactView(paginatedVideos) {
         <div class="video-item col-6 col-sm-4 col-md-3 col-lg-2">
             <div class="card h-100 border-0 shadow-sm" style="cursor: pointer;" onclick='openVideoDetailModal(${video.id})'>
                 ${firstThumbnail
-                    ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
+                ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
                            class="card-img-top rounded" 
                            alt="${video.file_name}" 
                            title="${video.file_name}" 
@@ -268,11 +282,11 @@ function renderSuperCompactView(paginatedVideos) {
                            onmouseenter="startThumbnailCycle(this)" 
                            onmouseleave="stopThumbnailCycle(this)" 
                            style="aspect-ratio: 16/9; object-fit: cover;">`
-                    : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center rounded" 
+                : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center rounded" 
                             style="aspect-ratio: 16/9;">
                             <i class="fas fa-video fa-2x"></i>
                        </div>`
-                }
+            }
             </div>
         </div>`;
     }).join('');
@@ -303,6 +317,7 @@ function renderPage(viewType = null) {
     const selectedViewRadio = document.querySelector('input[name="viewRadio"]:checked');
     // Default to 'grid' view if the radio buttons aren't on the page or none is checked
     const selectedView = viewType || (selectedViewRadio ? selectedViewRadio.value : 'grid');
+    const itemsPerPage = getItemsPerPage(selectedView);
     const paginatedVideos = videos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     if (selectedView === 'list') {
@@ -313,11 +328,11 @@ function renderPage(viewType = null) {
         // 'grid' or 'compact'
         renderGridView(paginatedVideos, selectedView);
     }
-    renderPagination();
+    renderPagination(itemsPerPage);
 }
 
 // Render pagination controls
-function renderPagination() {
+function renderPagination(itemsPerPage) {
     const pagination = document.getElementById('pagination');
     const pageCount = Math.ceil(videos.length / itemsPerPage);
     pagination.innerHTML = '';
@@ -426,7 +441,7 @@ async function openVideoDetailModal(videoId) {
     document.getElementById('videoDetailFilePath').value = video.file_path;
     document.getElementById('videoDetailFilename').value = video.file_name;
     document.getElementById('videoDetailCreationDate').value = new Date(video.parsed_datetime || video.file_created_date).toLocaleString();
-    
+
     // Handle tags
     const tags = video.tags || [];
     document.getElementById('videoDetailTags').value = tags.join(', ');

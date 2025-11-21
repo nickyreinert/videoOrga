@@ -50,23 +50,6 @@ class VideoTagger:
         """
         self.extractor = FrameExtractor(num_frames=num_frames, num_thumbnails=num_thumbnails)
 
-        # Initialize with new multimodal analyzer (no need for separate LLM config)
-        self.analyzer = AIAnalyzer(
-            model_name=model_name,
-            tag_language=tag_language,
-            stopwords=tag_stopwords
-        )
-        
-        # Audio analysis (optional)
-        self.enable_audio = enable_audio
-        if enable_audio:
-            self.audio_analyzer = AudioAnalyzer(
-                whisper_model=whisper_model,
-                device="auto",
-                language=language,
-                no_pre_detect=no_pre_detect
-            )
-        else:
             self.audio_analyzer = None
         
         # Set database path
@@ -318,69 +301,6 @@ class VideoTagger:
     
     def cleanup(self):
         """Clean up resources"""
-        self.analyzer.cleanup()
-        if self.audio_analyzer:
-            self.audio_analyzer.cleanup()
-        self.db.close()
-    
-    def fix_all_tags(self):
-        """
-        Reprocess tags for all videos in the database using improved filtering.
-        Does NOT re-analyze videos - just re-extracts tags from existing summaries/descriptions.
-        """
-        print(f"\n{'='*60}")
-        print("Fixing tags for all videos...")
-        print(f"{'='*60}\n")
-        
-        # Get all videos from database
-        self.db.cursor.execute("SELECT id, ai_summary, description FROM videos ORDER BY id")
-        videos = self.db.cursor.fetchall()
-        
-        if not videos:
-            print("No videos found in database.")
-            return
-        
-        print(f"Found {len(videos)} video(s) to fix...\n")
-        
-        fixed_count = 0
-        for video in videos:
-            video_id, ai_summary, description = video
-            
-            # Extract tags from summary (preferred) or description
-            text_source = ai_summary if ai_summary else (description if description else "")
-            
-            if not text_source:
-                print(f"  Video ID {video_id}: No summary or description to extract from, skipping")
-                continue
-            
-            # Re-extract tags using improved filtering
-            new_tags = self.analyzer._extract_tags_from_text(text_source)
-            
-            if new_tags:
-                # Delete old tags
-                self.db.cursor.execute("DELETE FROM tags WHERE video_id = ?", (video_id,))
-                
-                # Insert new tags
-                self.db.insert_tags(video_id, new_tags)
-                
-                fixed_count += 1
-                print(f"  Video ID {video_id}: Updated {len(new_tags)} tags")
-            else:
-                print(f"  Video ID {video_id}: No valid tags extracted")
-        
-        self.db.conn.commit()
-        
-        print(f"\n{'='*60}")
-        print(f"Tag fixing complete!")
-        print(f"{'='*60}")
-        print(f"Videos processed: {len(videos)}")
-        print(f"Tags updated: {fixed_count}")
-        print(f"Skipped: {len(videos) - fixed_count}")
-
-
-def main():
-    """Main entry point"""
-    warnings.filterwarnings("ignore", message="TypedStorage is deprecated")
     warnings.filterwarnings("ignore", message="`resume_download` is deprecated", category=FutureWarning)
 
     parser = argparse.ArgumentParser(

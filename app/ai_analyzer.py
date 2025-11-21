@@ -313,6 +313,55 @@ ASSISTANT:"""
         
         return tags
     
+    def clean_tag_list(self, tags: List[str]) -> List[str]:
+        """
+        Clean a list of existing tags using the configured filters
+        
+        Args:
+            tags: List of tags to clean
+            
+        Returns:
+            List of cleaned tags
+        """
+        cleaned_tags = []
+        seen_tags = set()
+        
+        for tag in tags:
+            # Normalize
+            tag = tag.lower().strip()
+            
+            # Remove special chars (keep only letters and spaces)
+            tag = re.sub(r'[^a-z ]+', '', tag)
+            
+            # Basic filtering: length > 2
+            if not tag or len(tag) <= 2:
+                continue
+            
+            # Max length check
+            if len(tag) > 30:
+                continue
+                
+            # Stopword filtering
+            if tag in self.stopwords:
+                continue
+                
+            # Check for repeated characters
+            if len(set(tag)) == 1:
+                continue
+            
+            # Detect repeated substring patterns
+            if self._has_repeated_pattern(tag):
+                continue
+            
+            # Deduplicate
+            if tag in seen_tags:
+                continue
+                
+            seen_tags.add(tag)
+            cleaned_tags.append(tag)
+        
+        return cleaned_tags
+    
     def _has_repeated_pattern(self, text: str) -> bool:
         """
         Detect if a string has a repeated substring pattern

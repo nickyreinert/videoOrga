@@ -1,9 +1,7 @@
 """
 Video Auto-Tagger - Main Script with SQLite Storage
 Processes videos, extracts frames, analyzes with AI, and stores in SQLite database
-NOW USING SINGLE MULTIM
-
-ODAL LLM FOR EVERYTHING
+NOW USING SINGLE MULTIMODAL LLM FOR EVERYTHING
 """
 
 import os
@@ -45,20 +43,243 @@ class VideoTagger:
             min_frames: Minimum number of frames to extract
             max_frames: Maximum number of frames to extract
             num_thumbnails: Number of thumbnail previews to extract
-            tag_language: Target language for tags (e.g., 'en', 'de', 'fr')
-            tag_stopwords: Custom stopwords to filter
-            model_name: Multimodal model ('llava', 'llava-large', 'blip2', 'instructblip')
+            tag_language: Language for tags (default: en)
+            tag_stopwords: List of stopwords to exclude from tags
+            model_name: Multimodal AI model name
+            db_path: Path to SQLite database
+            enable_audio: Enable audio transcription
+            whisper_model: Whisper model size
+            language: Audio language (optional)
+            no_pre_detect: Skip language detection for audio
         """
+        self.enable_audio = enable_audio
+        
+        # Initialize database
+        self.db = DatabaseHandler(db_path)
+        
+        # Initialize frame extractor
+        self.extractor = FrameExtractor(
+            frames_per_minute=frames_per_minute,
+            min_frames=min_frames,
+            max_frames=max_frames,
+            num_thumbnails=num_thumbnails
+        )
+        
+        # Initialize AI analyzer
+        self.analyzer = AIAnalyzer(
+            model_name=model_name,
+            tag_language=tag_language,
+            stopwords=tag_stopwords
+        )
+        
+        # Initialize audio analyzer if enabled
+        if self.enable_audio:
+            self.audio_analyzer = AudioAnalyzer(
+                whisper_model=whisper_model,
+                language=language,
+                no_pre_detect=no_pre_detect
+            )
+        else:
+            self.audio_analyzer = None
 
-        print(f"Using database: {self.db.db_path}")
-        if enable_audio:
-            print(f"Audio transcription: ENABLED (Whisper {whisper_model})")
-            if language:
-                print(f"Language forced to: {language.upper()}")
-    
-    def process_video(self, video_path: str, force: bool = False) -> Dict:
+    def process_video(self, video_path: str, force: bool = False):
         """
-        Process a single video: extract frames, analyze, generate tags, store in DB
+        Process a single video file
+        
+        Args:
+            video_path: Path to video file
+            force: Force reprocessing even if already in database
+            
+        Returns:
+            Dictionary with video metadata and tags
+        """
+        video_path = str(Path(video_path).resolve())
+        
+        # Check if already processed
+        if self.db.video_exists(video_path) and not force:
+            print(f"Video already in database: {Path(video_path).name}")
+            print("Use --force to reprocess")
+            video_id = self.db.get_video_id(video_path)
+            return self.db.get_video_with_tags(video_id)
+        
+        print(f"\n{'='*60}")
+        print(f"Processing: {Path(video_path).name}")
+        print(f"{'='*60}")
+        
+        # Step 1: Extract file metadata
+        print("\n[1/5] Extracting file metadata...")
+        try:
+            file_meta = extract_file_metadata(video_path)
+            print(f"  File size: {file_meta['file_size_bytes'] / (1024**2):.2f} MB")
+            print(f"  Modified: {file_meta['file_modified_date']}")
+            if file_meta['parsed_datetime']:
+                print(f"  Parsed datetime from filename: {file_meta['parsed_datetime']}")
+        except Exception as e:
+            print(f"Error extracting file metadata: {e}")
+            return None
+        
+        # Step 2: Extract frames for analysis
+        print("\n[2/5] Extracting frames for analysis...")
+        try:
+            frames, video_meta = self.extractor.extract_frames(video_path)
+        except Exception as e:
+            print(f"Error extracting frames: {e}")
+            return None
+        
+        if not frames:
+            print("No frames extracted, skipping video")
+            return None
+        
+        # Step 3: Extract thumbnail previews
+        print("\n[3/5] Extracting thumbnail previews...")
+        try:
+            thumbnails = self.extractor.extract_thumbnails(video_path)
+        except Exception as e:
+            print(f"Warning: Could not extract thumbnails: {e}")
+            thumbnails = []
+        
+        # Step 4: Analyze frames with AI (multimodal LLM does everything)
+        print("\n[4/5] Analyzing frames with multimodal AI...")
+        try:
+            analysis = self.analyzer.analyze_frames(frames)
+        except Exception as e:
+            print(f"Error analyzing frames: {e}")
+            return None
+        
+        # Step 5: Analyze audio (optional)
+        audio_result = {
+            'has_speech': False,
+            'transcript': '',
+            'summary': '',
+            'language': '',
+            'word_count': 0
+        }
+        
+        if self.enable_audio:
+            print("\n[5/5] Analyzing audio (transcription)...")
+            try:
+                audio_result = self.audio_analyzer.analyze_video_audio(
+                    video_path,
+                    summarize=False  # We'll use our multimodal LLM for summary
+                )
+            except Exception as e:
+                print(f"Warning: Audio analysis failed: {e}")
+        else:
+            print("\n[5/5] Skipping audio analysis (use --audio to enable)")
+        
+        # Generate consolidated AI summary using multimodal LLM
+        print("\n[6/6] Generating consolidated AI summary...")
+        ai_summary_result = self.analyzer.generate_ai_summary_and_tags(
+            visual_descriptions=analysis['descriptions'],
+            audio_transcript=audio_result.get('transcript', ''),
+            language=self.analyzer.tag_language
+        )
+        
+        ai_summary_text = ''
+        if ai_summary_result:
+            ai_summary_text = ai_summary_result['summary']
+            # Merge AI-generated tags with frame tags
+            analysis['tags'] = ai_summary_result['tags']
+            print(f"  Summary: {ai_summary_text[:100]}...")
+        
+        # Step 7: Store everything in database
+        print("\n[7/7] Storing in database...")
+        
+        # Combine metadata
+        video_data = {
+            **file_meta,
+            'duration_seconds': video_meta['duration_seconds'],
+            'fps': video_meta['fps'],
+            'width': video_meta['width'],
+            'height': video_meta['height'],
+            'resolution': video_meta['resolution'],
+            'codec': video_meta.get('codec', 'unknown'),
+            'processed_date': datetime.now().isoformat(),
+            'frames_analyzed': analysis['frame_count'],
+            'description': analysis['descriptions'][0] if analysis['descriptions'] else None,
+            # Audio data
+            'has_speech': audio_result['has_speech'],
+            'transcript': audio_result['transcript'],
+            'transcript_summary': audio_result['summary'],
+            'ai_summary': ai_summary_text,
+            'audio_language': audio_result['language'],
+            'word_count': audio_result['word_count']
+        }
+        
+        # Insert video record
+        video_id = self.db.insert_video(video_data)
+        
+        # Insert tags
+        self.db.insert_tags(video_id, analysis['tags'])
+        
+        # Insert frame descriptions
+        self.db.insert_frame_descriptions(video_id, analysis['descriptions'])
+        
+        # Insert thumbnails
+        if thumbnails:
+            self.db.insert_thumbnails(video_id, thumbnails)
+        
+        # Retrieve complete record
+        result = self.db.get_video_with_tags(video_id)
+        
+        # Print results
+        print(f"\n✓ Successfully processed and stored in database!")
+        print(f"  Video ID: {video_id}")
+        print(f"  Tags: {', '.join(result['tags'][:10])}...")
+        print(f"  Thumbnails: {len(thumbnails)} stored")
+        if audio_result['has_speech']:
+            print(f"  Audio: {audio_result['word_count']} words transcribed ({audio_result['language']})")
+        
+        return result
+    
+    def process_directory(self, directory: str, recursive: bool = False, force: bool = False):
+        """
+        Process all videos in a directory
+        
+        Args:
+            directory: Directory path
+            recursive: Search subdirectories
+            force: Force reprocessing of all videos
+        """
+        video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'}
+        
+        directory_path = Path(directory)
+        
+        if recursive:
+            video_files = []
+            for ext in video_extensions:
+                video_files.extend(directory_path.rglob(f"*{ext}"))
+        else:
+            video_files = []
+            for ext in video_extensions:
+                video_files.extend(directory_path.glob(f"*{ext}"))
+        
+        print(f"\nFound {len(video_files)} video(s) to process")
+        
+        successful = 0
+        failed = 0
+        
+        for i, video_file in enumerate(video_files, 1):
+            print(f"\n{'='*60}")
+            print(f"[{i}/{len(video_files)}]")
+            print(f"{'='*60}")
+            
+            try:
+                result = self.process_video(str(video_file), force=force)
+                if result:
+                    successful += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                print(f"Error processing {video_file.name}: {e}")
+                failed += 1
+        
+        else:
+            self.audio_analyzer = None
+
+    def process_video(self, video_path: str, force: bool = False):
+        """
+        Process a single video file
         
         Args:
             video_path: Path to video file
@@ -253,13 +474,6 @@ class VideoTagger:
         print(f"{'='*60}")
         print(f"Successful: {successful}")
         print(f"Failed: {failed}")
-        print(f"\nDatabase: {self.db.db_path}")
-        
-        # Show statistics
-        stats = self.db.get_statistics()
-        print(f"\nDatabase Statistics:")
-        print(f"  Total videos: {stats['total_videos']}")
-        print(f"  Unique tags: {stats['unique_tags']}")
         print(f"  Total size: {stats['total_size_gb']} GB")
         print(f"  Total duration: {stats['total_duration_hours']} hours")
         if stats.get('videos_with_speech', 0) > 0:
@@ -300,22 +514,26 @@ class VideoTagger:
         for i, video in enumerate(all_videos, 1):
             print(f"\n[{i}/{len(all_videos)}] Processing: {video['file_name']}")
             
-            # Get existing frame descriptions
-            descriptions = self.db.get_frame_descriptions(video['id'])
-            transcript = video.get('transcript', '')
+            # Get existing tags
+            video_id = video['id']
+            full_info = self.db.get_video_with_tags(video_id)
+            existing_tags = full_info.get('tags', [])
             
-            # Regenerate tags using AI
-            result = self.analyzer.generate_ai_summary_and_tags(
-                visual_descriptions=descriptions,
-                audio_transcript=transcript,
-                language=self.analyzer.tag_language
-            )
+            if not existing_tags:
+                print("  No tags found.")
+                continue
+                
+            # Clean tags using code-based filtering (no LLM)
+            cleaned_tags = self.analyzer.clean_tag_list(existing_tags)
             
-            if result:
-                # Remove old tags and insert new ones
-                self.db.delete_tags(video['id'])
-                self.db.insert_tags(video['id'], result['tags'])
-                print(f"  Updated tags: {', '.join(result['tags'][:10])}...")
+            # Remove old tags and insert new ones
+            self.db.delete_tags(video_id)
+            self.db.insert_tags(video_id, cleaned_tags)
+            
+            removed_count = len(existing_tags) - len(cleaned_tags)
+            print(f"  Updated tags: {len(cleaned_tags)} kept, {removed_count} removed")
+            if cleaned_tags:
+                print(f"  Tags: {', '.join(cleaned_tags[:10])}...")
     
     def cleanup(self):
         """Clean up resources"""

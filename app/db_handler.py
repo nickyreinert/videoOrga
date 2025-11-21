@@ -462,6 +462,42 @@ class DatabaseHandler:
         
         return video_dict
     
+    def get_all_videos(self) -> List[Dict]:
+        """
+        Get all videos in the database
+        
+        Returns:
+            List of video dictionaries
+        """
+        self.cursor.execute("SELECT * FROM videos ORDER BY parsed_datetime DESC")
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def get_frame_descriptions(self, video_id: int) -> List[str]:
+        """
+        Get frame descriptions for a video
+        
+        Args:
+            video_id: Video ID
+            
+        Returns:
+            List of description strings
+        """
+        self.cursor.execute(
+            "SELECT description FROM frame_descriptions WHERE video_id = ? ORDER BY frame_index",
+            (video_id,)
+        )
+        return [row[0] for row in self.cursor.fetchall()]
+    
+    def delete_tags(self, video_id: int):
+        """
+        Delete all tags for a video
+        
+        Args:
+            video_id: Video ID
+        """
+        self.cursor.execute("DELETE FROM tags WHERE video_id = ?", (video_id,))
+        self.conn.commit()
+    
     def get_all_tags(self) -> List[Tuple[str, int]]:
         """Get all unique tags with counts"""
         self.cursor.execute("""

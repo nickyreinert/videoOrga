@@ -48,40 +48,8 @@ class VideoTagger:
             tag_language: Target language for tags (e.g., 'en', 'de', 'fr')
             tag_stopwords: Custom stopwords to filter
             model_name: Multimodal model ('llava', 'llava-large', 'blip2', 'instructblip')
-            db_path: Path to SQLite database
-            enable_audio: Whether to transcribe and summarize audio
-            whisper_model: Whisper model size
-            language: Language for transcription or None for auto-detect
-            no_pre_detect: Disable language pre-detection
         """
-        self.extractor = FrameExtractor(
-            frames_per_minute=frames_per_minute,
-            min_frames=min_frames,
-            max_frames=max_frames,
-            num_thumbnails=num_thumbnails
-        )
-        
-        self.analyzer = AIAnalyzer(
-            model_name=model_name,
-            tag_language=tag_language,
-            tag_stopwords=tag_stopwords
-        )
-        
-        self.enable_audio = enable_audio
-        if enable_audio:
-            self.audio_analyzer = AudioAnalyzer(
-                model_size=whisper_model,
-                language=language,
-                no_pre_detect=no_pre_detect
-            )
-        else:
-            self.audio_analyzer = None
-        
-        # Set database path
-        if db_path is None:
-            db_path = "video_archive.db"
-        self.db = DatabaseHandler(db_path)
-        
+
         print(f"Using database: {self.db.db_path}")
         if enable_audio:
             print(f"Audio transcription: ENABLED (Whisper {whisper_model})")

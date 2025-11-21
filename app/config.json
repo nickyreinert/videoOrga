@@ -1,5 +1,4 @@
 {
-
     "language": "de,en",
     "ai_summary": {
         "_description": "Settings for the consolidated AI summary feature.",
@@ -10,10 +9,11 @@
         "prompt_file_description": "Path to a text file containing the prompt for summary and tag generation. Placeholders: {language}, {visual_context}, {audio_transcript}",
         "prompt_file": "summary_prompt.txt"
     },
-
     "processing": {
-        "_description": "Settings for video processing and frame analysis.",
-        "num_frames": 12,
+        "_description": "Settings for video processing and frame analysis. frames_per_minute controls how many frames are extracted per minute of video duration.",
+        "frames_per_minute": 2.0,
+        "min_frames": 3,
+        "max_frames": 50,
         "num_thumbnails": 5,
         "model_name": "blip",
         "force_reprocess": true,
@@ -23,7 +23,16 @@
         "_description": "Settings for tag generation and language.",
         "language": "de",
         "stopwords": [
-            "eine", "ein", "der", "die", "das", "und", "in", "zu", "von", "mit"
+            "eine",
+            "ein",
+            "der",
+            "die",
+            "das",
+            "und",
+            "in",
+            "zu",
+            "von",
+            "mit"
         ]
     },
     "audio": {

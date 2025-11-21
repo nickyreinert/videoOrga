@@ -15,16 +15,21 @@ from PIL import Image
 
 
 class FrameExtractor:
-    """Extracts frames from videos using various sampling strategies"""
+    """Extracts frames from videos using duration-based sampling"""
     
-    def __init__(self, num_frames: int = 8, num_thumbnails: int = 5):
+    def __init__(self, frames_per_minute: float = 2.0, min_frames: int = 3, max_frames: int = 50, num_thumbnails: int = 5):
         """
-        Initialize frame extractor
+        Initialize frame extractor with duration-based scaling
         
         Args:
-            num_frames: Number of frames to extract per video
+            frames_per_minute: Number of frames to extract per minute of video
+            min_frames: Minimum number of frames to extract
+            max_frames: Maximum number of frames to extract
+            num_thumbnails: Number of thumbnail previews to extract
         """
-        self.num_frames = num_frames
+        self.frames_per_minute = frames_per_minute
+        self.min_frames = min_frames
+        self.max_frames = max_frames
         self.num_thumbnails = num_thumbnails
     
     def extract_frames(self, video_path: str) -> Tuple[List[np.ndarray], dict]:
@@ -62,16 +67,24 @@ class FrameExtractor:
             'codec': self._get_codec(cap)
         }
         
+        # Calculate number of frames to extract based on video duration
+        duration_minutes = duration / 60.0
+        calculated_frames = int(np.ceil(duration_minutes * self.frames_per_minute))
+        num_frames_to_extract = max(self.min_frames, min(calculated_frames, self.max_frames))
+        
+        print(f"Video duration: {duration:.1f}s ({duration_minutes:.2f} min)")
+        print(f"Frames to extract: {num_frames_to_extract} (factor: {self.frames_per_minute}/min, range: {self.min_frames}-{self.max_frames})")
+        
         # Calculate frame indices to extract (uniformly distributed)
-        if total_frames <= self.num_frames:
+        if total_frames <= num_frames_to_extract:
             # If video has fewer frames than requested, take all
             frame_indices = list(range(total_frames))
         else:
             # Distribute frames evenly, avoiding first 5% and last 10% (often black or credits)
             start_frame = int(total_frames * 0.05)
-            end_frame = int(total_frames * 0.90) # Reduced from 0.95 to avoid end credits
+            end_frame = int(total_frames * 0.90)
             frame_indices = np.linspace(start_frame, end_frame, 
-                                       self.num_frames, dtype=int).tolist()
+                                       num_frames_to_extract, dtype=int).tolist()
         
         # Extract frames
         frames = []
@@ -103,7 +116,6 @@ class FrameExtractor:
         
         Args:
             video_path: Path to video file
-            num_thumbnails: Number of thumbnail frames to extract
             
         Returns:
             List of tuples: (frame_number, base64_image_data, width, height)
@@ -120,7 +132,7 @@ class FrameExtractor:
         
         # Select random frames (avoid first 5% and last 10%)
         start_frame = int(total_frames * 0.05)
-        end_frame = int(total_frames * 0.90) # Reduced from 0.95
+        end_frame = int(total_frames * 0.90)
         
         if end_frame - start_frame < self.num_thumbnails:
             # If video is too short, just use evenly spaced frames
@@ -168,7 +180,7 @@ class FrameExtractor:
 
 def test_extraction(video_path: str):
     """Test function to verify frame extraction works"""
-    extractor = FrameExtractor(num_frames=8)
+    extractor = FrameExtractor(frames_per_minute=2.0, min_frames=3, max_frames=50)
     
     try:
         frames, metadata = extractor.extract_frames(video_path)
@@ -181,10 +193,6 @@ def test_extraction(video_path: str):
         print(f"Number of frames: {len(frames)}")
         if frames:
             print(f"Frame shape: {frames[0].shape}")
-        
-        # Optionally save frames for visual verification
-        # video_name = Path(video_path).stem
-        # extractor.save_frames_debug(frames, "debug_frames", video_name)
         
         return frames, metadata
         

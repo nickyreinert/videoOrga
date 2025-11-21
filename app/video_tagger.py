@@ -1,7 +1,9 @@
 """
 Video Auto-Tagger - Main Script with SQLite Storage
 Processes videos, extracts frames, analyzes with AI, and stores in SQLite database
-NOW USING SINGLE MULTIMODAL LLM FOR EVERYTHING
+NOW USING SINGLE MULTIM
+
+ODAL LLM FOR EVERYTHING
 """
 
 import os
@@ -23,11 +25,13 @@ class VideoTagger:
     """Main class for processing and tagging videos with SQLite storage"""
     
     def __init__(self, 
-                 num_frames: int = 8,
+                 frames_per_minute: float = 2.0,
+                 min_frames: int = 3,
+                 max_frames: int = 50,
                  num_thumbnails: int = 5,
                  tag_language: str = 'en',
                  tag_stopwords: List[str] = None,
-                 model_name: str = "llava",  # Changed from 'blip' to 'llava'
+                 model_name: str = "llava",
                  db_path: str = None,
                  enable_audio: bool = False,
                  whisper_model: str = "base",
@@ -37,7 +41,9 @@ class VideoTagger:
         Initialize video tagger with SQLite backend
         
         Args:
-            num_frames: Number of frames to extract per video
+            frames_per_minute: Number of frames to extract per minute of video
+            min_frames: Minimum number of frames to extract
+            max_frames: Maximum number of frames to extract
             num_thumbnails: Number of thumbnail previews to extract
             tag_language: Target language for tags (e.g., 'en', 'de', 'fr')
             tag_stopwords: Custom stopwords to filter
@@ -48,8 +54,27 @@ class VideoTagger:
             language: Language for transcription or None for auto-detect
             no_pre_detect: Disable language pre-detection
         """
-        self.extractor = FrameExtractor(num_frames=num_frames, num_thumbnails=num_thumbnails)
-
+        self.extractor = FrameExtractor(
+            frames_per_minute=frames_per_minute,
+            min_frames=min_frames,
+            max_frames=max_frames,
+            num_thumbnails=num_thumbnails
+        )
+        
+        self.analyzer = AIAnalyzer(
+            model_name=model_name,
+            tag_language=tag_language,
+            tag_stopwords=tag_stopwords
+        )
+        
+        self.enable_audio = enable_audio
+        if enable_audio:
+            self.audio_analyzer = AudioAnalyzer(
+                model_size=whisper_model,
+                language=language,
+                no_pre_detect=no_pre_detect
+            )
+        else:
             self.audio_analyzer = None
         
         # Set database path
@@ -299,8 +324,37 @@ class VideoTagger:
         for tag, count in tags:
             print(f"  {tag}: {count} videos")
     
+    def fix_all_tags(self):
+        """Reprocess tags for all videos without re-analyzing content"""
+        print("\n[Fix Tags] Reprocessing tags for all videos...")
+        all_videos = self.db.get_all_videos()
+        
+        for i, video in enumerate(all_videos, 1):
+            print(f"\n[{i}/{len(all_videos)}] Processing: {video['file_name']}")
+            
+            # Get existing frame descriptions
+            descriptions = self.db.get_frame_descriptions(video['id'])
+            transcript = video.get('transcript', '')
+            
+            # Regenerate tags using AI
+            result = self.analyzer.generate_ai_summary_and_tags(
+                visual_descriptions=descriptions,
+                audio_transcript=transcript,
+                language=self.analyzer.tag_language
+            )
+            
+            if result:
+                # Remove old tags and insert new ones
+                self.db.delete_tags(video['id'])
+                self.db.insert_tags(video['id'], result['tags'])
+                print(f"  Updated tags: {', '.join(result['tags'][:10])}...")
+    
     def cleanup(self):
         """Clean up resources"""
+        pass
+
+
+def main():
     warnings.filterwarnings("ignore", message="`resume_download` is deprecated", category=FutureWarning)
 
     parser = argparse.ArgumentParser(
@@ -328,13 +382,17 @@ Examples:
         """
     )
     parser.add_argument('input', nargs='?', default='.', help='Video file or directory')
-    parser.add_argument('--frames', type=int, default=8, help='Number of frames to extract (default: 8)')
+    parser.add_argument('--frames-per-minute', type=float, default=2.0, 
+                       help='Frames to extract per minute of video (default: 2.0)')
+    parser.add_argument('--min-frames', type=int, default=3,
+                       help='Minimum frames to extract (default: 3)')
+    parser.add_argument('--max-frames', type=int, default=50,
+                       help='Maximum frames to extract (default: 50)')
     parser.add_argument(
         '--model',
         choices=['llava', 'llava-large', 'blip2', 'instructblip'],
         default='llava',
-        help='Multimodal AI model (default: llava)'
-    )
+        help='Multimodal AI model (default: llava)')
     parser.add_argument('--language', type=str, default='en', help='Tag language (default: en)')
     parser.add_argument('--db', help='SQLite database path')
     parser.add_argument('--audio', action='store_true', help='Enable audio transcription')
@@ -371,7 +429,9 @@ Examples:
     # Combine settings: CLI arguments override config file, which overrides defaults
     # Processing settings
     processing_config = config.get('processing', {})
-    num_frames = args.frames if args.frames != 8 else processing_config.get('num_frames', 8)
+    frames_per_minute = args.frames_per_minute if args.frames_per_minute != 2.0 else processing_config.get('frames_per_minute', 2.0)
+    min_frames = args.min_frames if args.min_frames != 3 else processing_config.get('min_frames', 3)
+    max_frames = args.max_frames if args.max_frames != 50 else processing_config.get('max_frames', 50)
     num_thumbnails = processing_config.get('num_thumbnails', 5)
     recursive = args.recursive or processing_config.get('recursive_search', False)
     force = args.force or processing_config.get('force_reprocess', False)
@@ -392,9 +452,11 @@ Examples:
     audio_language = args.audio_language or audio_config.get('language')
     no_pre_detect = audio_config.get('no_pre_detect', False)
 
-    # Create tagger instance with simplified config (no more separate LLM settings!)
+    # Create tagger instance with duration-based frame extraction
     tagger = VideoTagger(
-        num_frames=num_frames,
+        frames_per_minute=frames_per_minute,
+        min_frames=min_frames,
+        max_frames=max_frames,
         num_thumbnails=num_thumbnails,
         model_name=model_name,
         tag_language=tag_language,

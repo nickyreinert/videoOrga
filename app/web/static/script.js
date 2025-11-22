@@ -3,7 +3,6 @@ let currentVideoId = null;
 let selectedTags = [];
 let videos = [];
 let sortState = { key: 'creation_date', order: 'desc' };
-let currentPage = 1;
 let player = null;
 
 // Debounce function to limit how often a function can run
@@ -89,20 +88,7 @@ function toggleTag(tagName) {
     filterVideos();
 }
 
-// Get items per page based on view type
-function getItemsPerPage(viewType) {
-    switch (viewType) {
-        case 'super-compact':
-            return 60;  // Show many more thumbnails
-        case 'compact':
-            return 24;  // More than grid but less than super compact
-        case 'list':
-            return 20;  // List view can show more
-        case 'grid':
-        default:
-            return 12;  // Standard grid view
-    }
-}
+
 
 // Filter videos based on current filters
 async function filterVideos() {
@@ -120,7 +106,6 @@ async function filterVideos() {
     try {
         const response = await fetch(`/api/videos?${params.toString()}`);
         videos = await response.json();
-        currentPage = 1; // Reset to first page
         renderPage();
     } catch (error) {
         console.error('Error filtering videos:', error);
@@ -412,28 +397,27 @@ function sortVideos(key) {
     renderPage();
 }
 
+// Render page with all videos (no pagination)
 function renderPage(viewType = null) {
     const selectedViewRadio = document.querySelector('input[name="viewRadio"]:checked');
     // Default to 'grid' view if the radio buttons aren't on the page or none is checked
     const selectedView = viewType || (selectedViewRadio ? selectedViewRadio.value : 'grid');
-    const itemsPerPage = getItemsPerPage(selectedView);
-    const paginatedVideos = videos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     if (selectedView === 'list') {
-        renderListViewGrouped(paginatedVideos);
+        renderListViewGrouped(videos);
     } else if (selectedView === 'super-compact') {
-        renderSuperCompactViewGrouped(paginatedVideos);
+        renderSuperCompactViewGrouped(videos);
     } else {
         // 'grid' or 'compact'
-        renderGridViewGrouped(paginatedVideos, selectedView);
+        renderGridViewGrouped(videos, selectedView);
     }
-    renderPagination(itemsPerPage);
 
     // Apply saved grouping state after rendering
     if (typeof applyGroupingState === 'function') {
         applyGroupingState();
     }
 }
+
 
 // Helper function to extract folder name from file path
 function getFolderFromPath(filePath) {
@@ -501,37 +485,7 @@ function groupVideosByYear(videos) {
     }));
 }
 
-// Render pagination controls
-function renderPagination(itemsPerPage) {
-    const pagination = document.getElementById('pagination');
-    const pageCount = Math.ceil(videos.length / itemsPerPage);
-    pagination.innerHTML = '';
 
-    if (pageCount <= 1) {
-        return;
-    }
-
-    for (let i = 1; i <= pageCount; i++) {
-        const li = document.createElement('li');
-        li.classList.add('page-item');
-        if (i === currentPage) {
-            li.classList.add('active');
-        }
-        const a = document.createElement('a');
-        a.classList.add('page-link');
-        a.href = '#';
-        a.innerText = i;
-        a.onclick = () => changePage(i);
-        li.appendChild(a);
-        pagination.appendChild(li);
-    }
-}
-
-// Change the current page
-function changePage(page) {
-    currentPage = page;
-    renderPage();
-}
 
 // Open video in system player or stream
 function openVideo(videoId) {

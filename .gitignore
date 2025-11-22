@@ -8,3 +8,5 @@ __pycache__/
 *.db
 model-cache/
 cache
+data/video_metadata.db-shm
+data/video_metadata.db-wal

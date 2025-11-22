@@ -134,12 +134,8 @@ class FrameExtractor:
         start_frame = int(total_frames * 0.05)
         end_frame = int(total_frames * 0.90)
         
-        if end_frame - start_frame < self.num_thumbnails:
-            # If video is too short, just use evenly spaced frames
-            frame_indices = np.linspace(start_frame, end_frame, self.num_thumbnails, dtype=int).tolist()
-        else:
-            # Random selection
-            frame_indices = sorted(random.sample(range(start_frame, end_frame), self.num_thumbnails))
+        # select evenly distributed frames
+        frame_indices = np.linspace(start_frame, end_frame, self.num_thumbnails, dtype=int).tolist()
         
         thumbnails = []
         

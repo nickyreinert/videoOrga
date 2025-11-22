@@ -123,3 +123,30 @@
     margin-top: 0.5rem;
     margin-bottom: 1rem;
 }
+
+/* Folder Separator Styling */
+.folder-separator {
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.folder-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 0.3rem;
+    text-align: left;
+}
+
+.folder-title i {
+    margin-right: 0.5rem;
+    color: #ffc107;
+}
+
+.folder-divider {
+    border: none;
+    height: 1px;
+    background: linear-gradient(to right, #6c757d, transparent);
+    margin-top: 0.3rem;
+    margin-bottom: 0.75rem;
+}

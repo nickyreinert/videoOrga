@@ -13,72 +13,76 @@
 
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
+        <div class="container-fluid">
             <a class="navbar-brand" href="/">Video Browser</a>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <div class="row">
-            <!-- Filters Sidebar -->
-            <div class="col-md-3">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">Filters</h5>
+    <div class="layout-container">
+        <div class="layout-row">
+            <!-- Left Sidebar - Fixed with scroll -->
+            <div class="left-sidebar">
+                <div class="sidebar-content">
+                    <h5 class="sidebar-title">Filters</h5>
+
+                    <div class="filter-section">
+                        <label for="search" class="filter-label">Search</label>
+                        <input type="text" id="search" class="form-control form-control-sm"
+                            placeholder="Search videos...">
                     </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <label for="search" class="form-label">Search</label>
-                            <div class="input-group">
-                                <input type="text" id="search" class="form-control" placeholder="Search videos...">
-                            </div>
+
+                    <!-- View Switch -->
+                    <div class="filter-section">
+                        <label class="filter-label">View</label>
+                        <div class="btn-group w-100" role="group" aria-label="View switch">
+                            <input type="radio" class="btn-check" name="viewRadio" id="btn-grid" value="grid"
+                                autocomplete="off" checked>
+                            <label class="btn btn-outline-primary btn-sm" for="btn-grid" title="Grid View"><i
+                                    class="fas fa-th-large"></i></label>
+
+                            <input type="radio" class="btn-check" name="viewRadio" id="btn-compact" value="compact"
+                                autocomplete="off">
+                            <label class="btn btn-outline-primary btn-sm" for="btn-compact" title="Compact View"><i
+                                    class="fas fa-th"></i></label>
+
+                            <input type="radio" class="btn-check" name="viewRadio" id="btn-super-compact"
+                                value="super-compact" autocomplete="off">
+                            <label class="btn btn-outline-primary btn-sm" for="btn-super-compact"
+                                title="Super Compact (Thumbnails Only)"><i class="fas fa-grip"></i></label>
+
+                            <input type="radio" class="btn-check" name="viewRadio" id="btn-list" value="list"
+                                autocomplete="off">
+                            <label class="btn btn-outline-primary btn-sm" for="btn-list" title="List View"><i
+                                    class="fas fa-list"></i></label>
                         </div>
+                    </div>
 
-                        <!-- View Switch -->
-                        <div class="mb-3">
-                            <label class="form-label">View</label>
-                            <div class="btn-group w-100" role="group" aria-label="View switch">
-                                <input type="radio" class="btn-check" name="viewRadio" id="btn-grid" value="grid"
-                                    autocomplete="off" checked>
-                                <label class="btn btn-outline-primary" for="btn-grid" title="Grid View"><i
-                                        class="fas fa-th-large"></i></label>
+                    <!-- Date Range -->
+                    <div class="filter-section">
+                        <label class="filter-label">Date Range</label>
+                        <input type="date" class="form-control form-control-sm mb-2" id="start-date">
+                        <input type="date" class="form-control form-control-sm" id="end-date">
+                    </div>
 
-                                <input type="radio" class="btn-check" name="viewRadio" id="btn-compact" value="compact"
-                                    autocomplete="off">
-                                <label class="btn btn-outline-primary" for="btn-compact" title="Compact View"><i
-                                        class="fas fa-th"></i></label>
-
-                                <input type="radio" class="btn-check" name="viewRadio" id="btn-super-compact"
-                                    value="super-compact" autocomplete="off">
-                                <label class="btn btn-outline-primary" for="btn-super-compact"
-                                    title="Super Compact (Thumbnails Only)"><i class="fas fa-grip"></i></label>
-
-                                <input type="radio" class="btn-check" name="viewRadio" id="btn-list" value="list"
-                                    autocomplete="off">
-                                <label class="btn btn-outline-primary" for="btn-list" title="List View"><i
-                                        class="fas fa-list"></i></label>
-                            </div>
-                        </div>
-
-                        <!-- Date Range -->
-                        <div class="mb-3">
-                            <label class="form-label">Date Range</label>
-                            <input type="date" class="form-control mb-2" id="start-date">
-                            <input type="date" class="form-control" id="end-date">
-                        </div>
-
-                        <!-- Tags -->
-                        <div class="mb-3">
-                            <label class="form-label">Tags</label>
-                            <div id="tag-cloud" class="tag-cloud"></div>
-                        </div>
+                    <!-- Tags -->
+                    <div class="filter-section">
+                        <label class="filter-label">Tags</label>
+                        <div id="tag-cloud" class="tag-cloud"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- Video Grid -->
-            <div class="col-md-9">
-                <div id="video-grid" class="row row-cols-1 row-cols-md-4 g-4"></div>
+            <!-- Main Content Area -->
+            <div class="main-content">
+                <div id="video-grid" class="row g-3"></div>
+            </div>
+
+            <!-- Right Year Navigation -->
+            <div class="right-sidebar">
+                <div class="year-nav-content">
+                    <h6 class="year-nav-title">Years</h6>
+                    <div id="year-navigation"></div>
+                </div>
             </div>
         </div>
     </div>

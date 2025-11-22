@@ -416,7 +416,52 @@ function renderPage(viewType = null) {
     if (typeof applyGroupingState === 'function') {
         applyGroupingState();
     }
+
+    // Populate year navigation
+    populateYearNavigation();
 }
+
+// Populate year navigation in right sidebar
+function populateYearNavigation() {
+    const yearNav = document.getElementById('year-navigation');
+    if (!yearNav) return;
+
+    // Extract unique years from videos
+    const years = [...new Set(videos.map(video => {
+        const date = new Date(video.parsed_datetime || video.file_created_date);
+        return date.getFullYear();
+    }))].sort((a, b) => b - a); // Sort descending
+
+    yearNav.innerHTML = years.map(year =>
+        `<a class="year-nav-item" onclick="scrollToYear('${year}')">${year}</a>`
+    ).join('');
+}
+
+// Scroll to specific year section
+function scrollToYear(year) {
+    const yearHeaders = document.querySelectorAll('.year-header');
+    let targetHeader = null;
+
+    // Find the year header that matches
+    yearHeaders.forEach(header => {
+        if (header.textContent.includes(year.toString())) {
+            targetHeader = header;
+        }
+    });
+
+    if (targetHeader) {
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            // Get the year separator div (parent of year header)
+            const yearSeparator = targetHeader.closest('.year-separator') || targetHeader.parentElement;
+            mainContent.scrollTo({
+                top: yearSeparator.offsetTop - 20,
+                behavior: 'smooth'
+            });
+        }
+    }
+}
+
 
 
 // Helper function to extract folder name from file path

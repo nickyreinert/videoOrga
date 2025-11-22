@@ -520,7 +520,7 @@ function changePage(page) {
 
 // Open video in system player or stream
 function openVideo(videoId) {
-    const videoUrl = `/ video / stream / ${videoId} `;
+    const videoUrl = `/video/stream/${videoId}`;
     const modal = new bootstrap.Modal(document.getElementById('videoPlayerModal'));
 
     if (!player) {
@@ -558,7 +558,7 @@ async function renameVideo() {
     }
 
     try {
-        const response = await fetch(`/ api / video / ${videoId}/rename`, {
+        const response = await fetch(`/api/video/${videoId}/rename`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

@@ -414,7 +414,10 @@ ASSISTANT:"""
         
         # Truncate audio if too long
         if len(audio_transcript) > 1000:
-            audio_transcript = audio_transcript[:1000] + "..."
+            current_length = len(audio_transcript)
+            nth_char = current_length // 1000
+            # fuzzy compress by removing every nth char to make it fit > 100 chars
+            audio_transcript = audio_transcript[::nth_char]
         
         # Use configured prompt template if available, otherwise fallback (though fallback shouldn't happen with correct config)
         if self.summary_prompt_template:
@@ -445,8 +448,11 @@ ASSISTANT:"""
                 temperature=0.7
             )
         
-        summary = self.processor.decode(outputs[0], skip_special_tokens=True)
-        
+
+        input_length = inputs['input_ids'].shape[1]
+        generated_ids = outputs[0][input_length:]  # Skip the input tokens
+        summary = self.processor.decode(generated_ids, skip_special_tokens=True)
+
         # Clean up output (remove prompt parts if they leak)
         # Note: This is harder with a custom prompt, but we can try to remove the prompt itself if it's echoed
         if prompt in summary:

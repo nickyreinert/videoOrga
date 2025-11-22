@@ -29,7 +29,7 @@ class AIAnalyzer:
                  device: str = "auto",
                  tag_language: str = 'en',
                  summary_llm_model: str = None,  # IGNORED - kept for compatibility
-                 summary_prompt_template: str = None,  # IGNORED - kept for compatibility
+                 summary_prompt_template: str = None,
                  summary_context_window: int = 512,  # IGNORED - kept for compatibility
                  stopwords: Optional[List[str]] = None):
         """
@@ -40,7 +40,7 @@ class AIAnalyzer:
             device: Device to run on ('cuda', 'cpu', or 'auto')
             tag_language: Target language for tags (e.g., 'en', 'de', 'fr')
             summary_llm_model: IGNORED (kept for config compatibility)
-            summary_prompt_template: IGNORED (kept for config compatibility)
+            summary_prompt_template: Template for the summary prompt
             summary_context_window: IGNORED (kept for config compatibility)
             stopwords: Custom list of stopwords to remove from tags
         """
@@ -49,10 +49,11 @@ class AIAnalyzer:
         self.tag_language = tag_language.lower()
         self.model = None
         self.processor = None
+        self.summary_prompt_template = summary_prompt_template
         
         # Ignore old config parameters but don't break if they're passed
-        if summary_llm_model or summary_prompt_template:
-            print("Note: summary_llm_model and summary_prompt_template are no longer needed with multimodal LLM")
+        if summary_llm_model:
+            print("Note: summary_llm_model is no longer needed with multimodal LLM")
         
         # Map model names to HuggingFace model IDs
         self.model_mapping = {
@@ -282,8 +283,9 @@ ASSISTANT:"""
         # Strip trailing numbers in parentheses like "(1)", "(2)" before processing
         text = re.sub(r'\s*\(\d+\)\s*', ' ', text)
         
-        # only keep letters and spaces
-        text = re.sub(r'[^a-z ]+', ' ', text.lower())
+        # Keep letters, spaces, and international characters (unicode support)
+        # Using [^\w\s] to remove punctuation but keep words
+        text = re.sub(r'[^\w\s]+', ' ', text.lower())
         pre_tags = [tag for tag in text.split(' ')]
         
         # Filter out empty, short, and stopword tags
@@ -331,7 +333,7 @@ ASSISTANT:"""
             tag = tag.lower().strip()
             
             # Remove special chars (keep only letters and spaces)
-            tag = re.sub(r'[^a-z ]+', '', tag)
+            tag = re.sub(r'[^\w\s]+', '', tag)
             
             # Basic filtering: length > 2
             if not tag or len(tag) <= 2:
@@ -414,15 +416,19 @@ ASSISTANT:"""
         if len(audio_transcript) > 1000:
             audio_transcript = audio_transcript[:1000] + "..."
         
-        # Build prompt
-        audio_section = f"\n\nAudio transcript:\n{audio_transcript}" if audio_transcript else ""
-        
-        prompt = f"""USER: Summarize this video{lang_instruction}.
-
-The video shows:
-{visual_context}{audio_section}
-
-Provide a concise summary paragraph{lang_instruction}.
+        # Use configured prompt template if available, otherwise fallback (though fallback shouldn't happen with correct config)
+        if self.summary_prompt_template:
+            prompt = self.summary_prompt_template.format(
+                language=lang_name,
+                visual_context=visual_context,
+                audio_transcript=audio_transcript
+            )
+        else:
+            # Fallback prompt
+            prompt = f"""USER: Summarize this video strictly in {lang_name}.
+Visuals: {visual_context}
+Audio: {audio_transcript}
+Provide a concise summary paragraph strictly in {lang_name}.
 ASSISTANT:"""
         
         # Generate summary
@@ -440,9 +446,15 @@ ASSISTANT:"""
             )
         
         summary = self.processor.decode(outputs[0], skip_special_tokens=True)
-        # Clean up output
-        for prompt_part in [prompt, "USER:", "ASSISTANT:"]:
-            summary = summary.replace(prompt_part, "")
+        
+        # Clean up output (remove prompt parts if they leak)
+        # Note: This is harder with a custom prompt, but we can try to remove the prompt itself if it's echoed
+        if prompt in summary:
+            summary = summary.replace(prompt, "")
+            
+        # Also try to remove standard chat markers
+        for marker in ["USER:", "ASSISTANT:", "[INST]", "[/INST]"]:
+            summary = summary.replace(marker, "")
         
         return summary.strip()
 

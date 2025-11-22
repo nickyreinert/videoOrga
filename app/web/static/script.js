@@ -22,6 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load tags for the tag cloud
         loadTags();
 
+        // Set up tag filter input handler
+        setupTagFilter();
+
         // Set up search input handler
         const searchInput = document.getElementById('search');
         searchInput.addEventListener('input', debounce(filterVideos, 300));
@@ -52,24 +55,43 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Load and display tags in the tag cloud
+// Global state for all tags
+let allTags = [];
+
+// Load and display tags in the tag cloud (with filtering)
 async function loadTags() {
     try {
         const response = await fetch('/api/tags');
         const tags = await response.json();
-
-        const tagCloud = document.getElementById('tag-cloud');
-        tagCloud.innerHTML = tags.map(tag => `
-            <span class="tag ${selectedTags.includes(tag.tag_name) ? 'selected' : ''}" data-tag="${tag.tag_name}" onclick="toggleTag('${tag.tag_name}')">
-                ${tag.tag_name} (${tag.count})
-            </span>
-        `).join('');
+        allTags = tags; // store all tags
+        renderTagCloud();
     } catch (error) {
         console.error('Error loading tags:', error);
     }
 }
 
-// Toggle tag selection in the filter
+// Render tag cloud based on current filter input
+function renderTagCloud() {
+    const filterInput = document.getElementById('tag-filter');
+    const filterText = filterInput ? filterInput.value.trim().toLowerCase() : '';
+    const filtered = allTags.filter(tag => tag.tag_name.toLowerCase().includes(filterText));
+    const tagCloud = document.getElementById('tag-cloud');
+    tagCloud.innerHTML = filtered.map(tag => `
+        <span class="tag ${selectedTags.includes(tag.tag_name) ? 'selected' : ''}" data-tag="${tag.tag_name}" onclick="toggleTag('${tag.tag_name}')">
+            ${tag.tag_name} (${tag.count})
+        </span>
+    `).join('');
+}
+
+// Set up tag filter input handler
+function setupTagFilter() {
+    const filterInput = document.getElementById('tag-filter');
+    if (filterInput) {
+        filterInput.addEventListener('input', debounce(renderTagCloud, 300));
+    }
+}
+
+// Existing toggleTag now re-renders tag cloud after updating selection
 function toggleTag(tagName) {
     const index = selectedTags.indexOf(tagName);
     if (index === -1) {
@@ -77,14 +99,8 @@ function toggleTag(tagName) {
     } else {
         selectedTags.splice(index, 1);
     }
-
-    // Also re-render the main tag cloud to show selection state
-    const tagCloud = document.getElementById('tag-cloud');
-    tagCloud.querySelectorAll('.tag').forEach(tagSpan => {
-        const currentTagName = tagSpan.dataset.tag;
-        tagSpan.classList.toggle('selected', selectedTags.includes(currentTagName));
-    });
-
+    // Re-render tag cloud to reflect selection state
+    renderTagCloud();
     filterVideos();
 }
 

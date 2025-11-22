@@ -150,3 +150,33 @@
     margin-top: 0.3rem;
     margin-bottom: 0.75rem;
 }
+
+/* Collapse/Expand Functionality */
+.year-header,
+.folder-header {
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.year-header:hover {
+    opacity: 0.8;
+}
+
+.folder-header:hover {
+    opacity: 0.8;
+}
+
+.collapse-icon {
+    display: inline-block;
+    margin-right: 0.5rem;
+    transition: transform 0.3s ease;
+}
+
+.collapse-icon.collapsed {
+    transform: rotate(-90deg);
+}
+
+.collapsed {
+    display: none !important;
+}

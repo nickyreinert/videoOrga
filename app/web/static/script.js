@@ -239,10 +239,12 @@ function renderListViewGrouped(paginatedVideos) {
     grid.innerHTML = groupedByYear.map(group => {
         return `
             <div class="year-separator mb-3">
-                <h3 class="year-title">${group.year}</h3>
+                <h3 class="year-title year-header" onclick="toggleYearGroup('${group.year}')">
+                    <i class="fas fa-chevron-down collapse-icon"></i>${group.year}
+                </h3>
                 <hr class="year-divider">
             </div>
-            <table class="table table-striped mb-5">
+            <table class="table table-striped mb-5" data-year="${group.year}">
                 <thead>
                     <tr>
                         <th scope="col">Thumbnail</th>
@@ -294,7 +296,9 @@ function renderGridViewGrouped(paginatedVideos, viewType = 'grid') {
         html += `
             <div class="col-12">
                 <div class="year-separator">
-                    <h3 class="year-title">${yearGroup.year}</h3>
+                    <h3 class="year-title year-header" onclick="toggleYearGroup('${yearGroup.year}')">
+                        <i class="fas fa-chevron-down collapse-icon"></i>${yearGroup.year}
+                    </h3>
                     <hr class="year-divider" />
                 </div>
             </div>`;
@@ -302,9 +306,11 @@ function renderGridViewGrouped(paginatedVideos, viewType = 'grid') {
         yearGroup.folders.forEach(folderGroup => {
             // Folder separator
             html += `
-                <div class="col-12">
+                <div class="col-12" data-year="${yearGroup.year}">
                     <div class="folder-separator">
-                        <h4 class="folder-title"><i class="fas fa-folder"></i> ${folderGroup.folder}</h4>
+                        <h4 class="folder-title folder-header" onclick="toggleFolderGroup('${yearGroup.year}', '${folderGroup.folder}')">
+                            <i class="fas fa-chevron-down collapse-icon"></i><i class="fas fa-folder"></i> ${folderGroup.folder}
+                        </h4>
                         <hr class="folder-divider" />
                     </div>
                 </div>`;
@@ -314,7 +320,7 @@ function renderGridViewGrouped(paginatedVideos, viewType = 'grid') {
                 const thumbnails = video.thumbnail_data || [];
                 const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
                 html += `
-                <div class="video-item ${colClass}">
+                <div class="video-item ${colClass}" data-year="${yearGroup.year}" data-folder="${folderGroup.folder}">
                     <div class="card h-100">
                         ${firstThumbnail ? `<img src="data:image/jpeg;base64,${firstThumbnail}" class="card-img-top" alt="Thumbnail" data-thumbnails='${JSON.stringify(thumbnails)}' onmouseenter="startThumbnailCycle(this)" onmouseleave="stopThumbnailCycle(this)" />` : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 150px;">No Thumbnail</div>`}
                         <div class="card-body" onclick='openVideoDetailModal(${video.id})'>
@@ -349,7 +355,9 @@ function renderSuperCompactViewGrouped(paginatedVideos) {
         html += `
             <div class="col-12">
                 <div class="year-separator">
-                    <h3 class="year-title">${yearGroup.year}</h3>
+                    <h3 class="year-title year-header" onclick="toggleYearGroup('${yearGroup.year}')">
+                        <i class="fas fa-chevron-down collapse-icon"></i>${yearGroup.year}
+                    </h3>
                     <hr class="year-divider" />
                 </div>
             </div>`;
@@ -357,9 +365,11 @@ function renderSuperCompactViewGrouped(paginatedVideos) {
         yearGroup.folders.forEach(folderGroup => {
             // Folder separator
             html += `
-                <div class="col-12">
+                <div class="col-12" data-year="${yearGroup.year}">
                     <div class="folder-separator">
-                        <h4 class="folder-title"><i class="fas fa-folder"></i> ${folderGroup.folder}</h4>
+                        <h4 class="folder-title folder-header" onclick="toggleFolderGroup('${yearGroup.year}', '${folderGroup.folder}')">
+                            <i class="fas fa-chevron-down collapse-icon"></i><i class="fas fa-folder"></i> ${folderGroup.folder}
+                        </h4>
                         <hr class="folder-divider" />
                     </div>
                 </div>`;
@@ -369,7 +379,7 @@ function renderSuperCompactViewGrouped(paginatedVideos) {
                 const thumbnails = video.thumbnail_data || [];
                 const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
                 html += `
-                <div class="video-item col-6 col-sm-4 col-md-3 col-lg-2">
+                <div class="video-item col-6 col-sm-4 col-md-3 col-lg-2" data-year="${yearGroup.year}" data-folder="${folderGroup.folder}">
                     <div class="card h-100 border-0 shadow-sm" style="cursor: pointer;" onclick='openVideoDetailModal(${video.id})'>
                         ${firstThumbnail ? `<img src="data:image/jpeg;base64,${firstThumbnail}" class="card-img-top rounded" alt="${video.file_name}" title="${video.file_name}" data-thumbnails='${JSON.stringify(thumbnails)}' onmouseenter="startThumbnailCycle(this)" onmouseleave="stopThumbnailCycle(this)" style="aspect-ratio: 16/9; object-fit: cover;" />` : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center rounded" style="aspect-ratio: 16/9;"><i class="fas fa-video fa-2x"></i></div>`}
                     </div>
@@ -418,6 +428,11 @@ function renderPage(viewType = null) {
         renderGridViewGrouped(paginatedVideos, selectedView);
     }
     renderPagination(itemsPerPage);
+
+    // Apply saved grouping state after rendering
+    if (typeof applyGroupingState === 'function') {
+        applyGroupingState();
+    }
 }
 
 // Helper function to extract folder name from file path

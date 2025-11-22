@@ -442,11 +442,10 @@ function populateYearNavigation() {
     const yearNav = document.getElementById('year-navigation');
     if (!yearNav) return;
 
-    // Extract unique years from videos
-    const years = [...new Set(videos.map(video => {
-        const date = new Date(video.parsed_datetime || video.file_created_date);
-        return date.getFullYear();
-    }))].sort((a, b) => b - a); // Sort descending
+    // Extract unique years from videos using path-based year
+    const years = [...new Set(videos.map(video => getYearFromPath(video.file_path)))]
+        .filter(year => year !== '(Unknown)')
+        .sort((a, b) => b - a); // Sort descending
 
     yearNav.innerHTML = years.map(year =>
         `<a class="year-nav-item" onclick="scrollToYear('${year}')">${year}</a>`
@@ -480,6 +479,23 @@ function scrollToYear(year) {
 
 
 
+// Helper function to extract year from file path
+function getYearFromPath(filePath) {
+    if (!filePath) return '(Unknown)';
+
+    // Normalize path separators to forward slashes
+    const normalizedPath = filePath.replace(/\\/g, '/');
+
+    // Look for a 4-digit year in the path (e.g., /videos/2011/...)
+    const yearMatch = normalizedPath.match(/\/(\d{4})\//);
+    if (yearMatch) {
+        return yearMatch[1];
+    }
+
+    // Fallback to date-based year if no year found in path
+    return '(Unknown)';
+}
+
 // Helper function to extract folder name from file path
 function getFolderFromPath(filePath) {
     if (!filePath) return '(Unknown)';
@@ -503,8 +519,7 @@ function groupVideosByYearAndFolder(videos) {
     const grouped = {};
 
     videos.forEach(video => {
-        const date = new Date(video.parsed_datetime || video.file_created_date);
-        const year = date.getFullYear();
+        const year = getYearFromPath(video.file_path);
         const folder = getFolderFromPath(video.file_path);
 
         if (!grouped[year]) {
@@ -532,8 +547,7 @@ function groupVideosByYearAndFolder(videos) {
 function groupVideosByYear(videos) {
     const grouped = {};
     videos.forEach(video => {
-        const date = new Date(video.parsed_datetime || video.file_created_date);
-        const year = date.getFullYear();
+        const year = getYearFromPath(video.file_path);
         if (!grouped[year]) {
             grouped[year] = [];
         }

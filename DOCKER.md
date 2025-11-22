@@ -38,3 +38,30 @@ sudo systemctl restart nvidia-dockerdocker-compose run --rm video-tagger rm -rf 
 
 # Backup database
 docker cp video-tagger:/app/data/video_metadata.db ./backup/
+
+## CLI Arguments
+The Docker container forwards all command‑line arguments to the `video_tagger.py` entrypoint. The full set of supported arguments is:
+
+```
+--frames-per-minute N    Number of frames to extract per minute (default: 2.0)
+--min-frames N          Minimum frames to extract (default: 3)
+--max-frames N          Maximum frames to extract (default: 50)
+--model MODEL           AI model to use (llava, llava-large, blip2, instructblip) (default: llava)
+--language LANG         Tag language (default: en)
+--db PATH               SQLite database path
+--audio                 Enable audio transcription
+--whisper-model MODEL   Whisper model size (tiny, base, small, medium, large) (default: base)
+--audio-language LANG   Force audio transcription language
+--recursive             Process subdirectories recursively
+--force                 Force reprocessing of videos
+--search TAG            Search videos by tag
+--stats                 Show database statistics
+--fix-tags              Reprocess tags for all videos (no re‑analysis)
+--config FILE           Path to JSON configuration file
+```
+
+Example Docker command using several arguments:
+```
+ docker compose run --rm video-tagger process "/videos/example.mp4" \
+    --audio --whisper-model small --language de --force
+```

@@ -141,62 +141,6 @@ This creates `video_archive.db` inside the `/path/to/videos/` directory.
 ```bash
 python video_tagger.py . --search "outdoor"
 ```
-
-### View Statistics
-
-```bash
-python video_tagger.py . --stats
-```
-
-## Usage
-
-```
-python video_tagger.py <input> [options]
-
-Arguments:
-  input                 Video file or directory to process (default: current dir)
-
-Options:
-  --frames N            Number of frames to extract (default: 8)
-  --model MODEL         AI model: blip, blip2, or clip (default: blip)
-  --db PATH             SQLite database path (default: video_archive.db)
-  --recursive           Process subdirectories
-  --force               Reprocess already tagged videos
-  --search TAG          Search videos by tag
-  --stats               Show database statistics
-```
-
-## Examples
-
-### Basic Processing
-
-```bash
-# Process with default settings (BLIP model, 8 frames)
-python video_tagger.py vacation.mp4
-
-# Use more frames for longer videos
-python video_tagger.py documentary.mp4 --frames 16
-
-# Use BLIP-2 for better descriptions (needs more VRAM)
-python video_tagger.py video.mp4 --model blip2
-```
-
-### Batch Processing
-
-```bash
-# Process all videos in current directory
-python video_tagger.py .
-
-# Process directory and subdirectories
-python video_tagger.py /videos --recursive
-
-# Use custom database location
-python video_tagger.py /videos --db /my/custom/archive.db
-
-# View what's in the database
-python video_tagger.py . --stats
-```
-
 ### Searching
 
 ```bash
@@ -335,32 +279,6 @@ ffmpeg -version
 - Check GPU is being used: `nvidia-smi`
 
 ### Import Errors
-```bash
-# Reinstall transformers
-pip install --upgrade transformers accelerate
-
-# For BLIP-2
-pip install salesforce-lavis
-```
-
-## Project Structure
-
-```
-video-auto-tagger/
-├── frame_extractor.py    # Frame sampling & thumbnail generation
-├── ai_analyzer.py        # AI model integration
-├── db_handler.py         # SQLite database operations ⭐ NEW
-├── video_tagger.py       # Main processing script
-├── requirements.txt      # Dependencies
-├── README.md            # This file
-├── DEV-GUIDE.md         # Development roadmap
-└── video_archive.db     # Generated SQLite database (output)
-```
-
-## Performance
-
-### Processing Time Examples
-
 Approximate processing times on RTX 3070:
 
 - **Short video** (2-3 min): ~15-30 seconds

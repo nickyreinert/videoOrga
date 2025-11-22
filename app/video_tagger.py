@@ -371,12 +371,6 @@ Examples:
         """
     )
     parser.add_argument('input', nargs='?', default='.', help='Video file or directory')
-    parser.add_argument('--frames-per-minute', type=float, default=2.0, 
-                       help='Frames to extract per minute of video (default: 2.0)')
-    parser.add_argument('--min-frames', type=int, default=3,
-                       help='Minimum frames to extract (default: 3)')
-    parser.add_argument('--max-frames', type=int, default=50,
-                       help='Maximum frames to extract (default: 50)')
     parser.add_argument(
         '--model',
         choices=['llava', 'llava-large', 'blip2', 'instructblip'],
@@ -393,7 +387,7 @@ Examples:
     parser.add_argument('--search', help='Search videos by tag')
     parser.add_argument('--stats', action='store_true', help='Show database statistics')
     parser.add_argument('--fix-tags', action='store_true', help='Reprocess tags for all videos (no re-analysis)')
-    parser.add_argument('--config', help='Path to JSON configuration file')
+    parser.add_argument('--config', help='Path to JSON configuration file', default='config.json')
     
     args = parser.parse_args()
     
@@ -418,9 +412,10 @@ Examples:
     # Combine settings: CLI arguments override config file, which overrides defaults
     # Processing settings
     processing_config = config.get('processing', {})
-    frames_per_minute = args.frames_per_minute if args.frames_per_minute != 2.0 else processing_config.get('frames_per_minute', 2.0)
-    min_frames = args.min_frames if args.min_frames != 3 else processing_config.get('min_frames', 3)
-    max_frames = args.max_frames if args.max_frames != 50 else processing_config.get('max_frames', 50)
+
+    frames_per_minute = processing_config.get('frames_per_minute', 2.0)
+    min_frames = processing_config.get('min_frames', 3)
+    max_frames = processing_config.get('max_frames', 50)
     num_thumbnails = processing_config.get('num_thumbnails', 5)
     recursive = args.recursive or processing_config.get('recursive_search', False)
     force = args.force or processing_config.get('force_reprocess', False)

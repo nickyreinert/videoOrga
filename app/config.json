@@ -8,9 +8,9 @@
     },
     "processing": {
         "_description": "Settings for video processing and frame analysis. frames_per_minute controls how many frames are extracted per minute of video duration.",
-        "frames_per_minute": 2.0,
+        "frames_per_minute": 3.0,
         "min_frames": 3,
-        "max_frames": 50,
+        "max_frames": 1000,
         "num_thumbnails": 5,
         "model_name": "llava",
         "force_reprocess": true,
@@ -34,7 +34,7 @@
     },
     "audio": {
         "_description": "Settings for audio transcription with Whisper.",
-        "enabled": true,
+        "enabled": false,
         "whisper_model": "medium",
         "language": "de,en",
         "no_pre_detect": true

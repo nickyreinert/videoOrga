@@ -270,50 +270,41 @@ ASSISTANT:"""
             'frame_count': len(frames)
         }
     
-    def _extract_tags_from_text(self, text: str) -> List[str]:
+    def _seperate_summary_and_tags(self, text: str) -> List[str]:
         """
-        Extract and clean tags from text
+        Seperate summary and tags from text
         
         Args:
-            text: Raw text containing tags
+            text: Raw text containing summaray and tags, separated by "---"
             
         Returns:
-            List of cleaned tags
+            List of cleaned tags and summary
         """
-        # Strip trailing numbers in parentheses like "(1)", "(2)" before processing
-        text = re.sub(r'\s*\(\d+\)\s*', ' ', text)
+
+        summary, tags = text.split('Tags:')
+        
+        summary = summary.replace('Zusammenfassung:', '').strip()
+        
+        tags = tags.split(',')
         
         # Keep letters, spaces, and international characters (unicode support)
         # Using [^\w\s] to remove punctuation but keep words
-        text = re.sub(r'[^\w\s]+', ' ', text.lower())
-        pre_tags = [tag for tag in text.split(' ')]
         
-        # Filter out empty, short, and stopword tags
-        tags = []
-        for tag in pre_tags:
-            # Basic filtering: length > 2
-            if not tag or len(tag) <= 2:
-                continue
-            
-            # Max length check (prevent malicious/corrupted tags)
-            if len(tag) > 30:
-                continue
-                
-            # Stopword filtering
-            if tag in self.stopwords:
-                continue
-                
-            # Check for repeated characters (e.g. "nnn")
-            if len(set(tag)) == 1:
-                continue
-            
-            # Detect repeated substring patterns (e.g., "taschentaschentasche...")
-            if self._has_repeated_pattern(tag):
-                continue
-                
-            tags.append(tag)
+        tags = [tag.strip('.').strip() for tag in tags]
+
+        # remove short, long and stopword tag
+        tags = [
+            tag for tag 
+            in tags 
+            if tag not in self.stopwords and 
+            len(tag) > 2 and 
+            len(tag) < 30 
+        ]
+
+        # dedupe
+        tags = list(set(tags))
         
-        return tags
+        return summary, tags
     
     def clean_tag_list(self, tags: List[str]) -> List[str]:
         """
@@ -451,18 +442,19 @@ ASSISTANT:"""
 
         input_length = inputs['input_ids'].shape[1]
         generated_ids = outputs[0][input_length:]  # Skip the input tokens
-        summary = self.processor.decode(generated_ids, skip_special_tokens=True)
+        summary_and_tags = self.processor.decode(generated_ids, skip_special_tokens=True)
 
         # Clean up output (remove prompt parts if they leak)
         # Note: This is harder with a custom prompt, but we can try to remove the prompt itself if it's echoed
-        if prompt in summary:
-            summary = summary.replace(prompt, "")
+        if prompt in summary_and_tags:
+            summary_and_tags = summary_and_tags.replace(prompt, "")
             
         # Also try to remove standard chat markers
         for marker in ["USER:", "ASSISTANT:", "[INST]", "[/INST]"]:
-            summary = summary.replace(marker, "")
+            summary_and_tags = summary_and_tags.replace(marker, "")
         
-        return summary.strip()
+
+        return summary_and_tags.strip()
 
     def generate_ai_summary_and_tags(self,
                                      visual_descriptions: List[str],
@@ -484,10 +476,10 @@ ASSISTANT:"""
         
         try:
             # Generate summary
-            summary = self.generate_video_summary(visual_descriptions, audio_transcript)
+            summary_and_tags = self.generate_video_summary(visual_descriptions, audio_transcript)
             
             # extract tags from summary
-            tags = self._extract_tags_from_text(summary)
+            summary, tags = self._seperate_summary_and_tags(summary_and_tags)
             
             tags = sorted(list(tags))[:20]
             

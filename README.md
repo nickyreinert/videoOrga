@@ -385,3 +385,11 @@ A: Yes, but much slower. Set `device="cpu"` in code.
 
 **Q: Is my RTX 3070 enough?**  
 A: Yes! Use `base` or `small` model. You have 8GB VRAM, which is plenty.
+
+## Known Quirks
+
+### Prompt management
+
+- right now the prompt is tuned to work with `LLaVA`, means it's using `USER` and `ASSISTANT` keywords, when switchting to like `Mistral` or `LLaMA` the requires `INST` instead
+- the logic looks for `Tags:` to split the output of the summarizer, this is not fail safe
+- the logic is somehow hardcoded to German language, this is not fail safe

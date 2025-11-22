@@ -48,9 +48,6 @@ docker cp video-tagger:/app/data/video_metadata.db ./backup/
 The Docker container forwards all command‑line arguments to the `video_tagger.py` entrypoint. The full set of supported arguments is:
 
 ```
---frames-per-minute N    Number of frames to extract per minute (default: 2.0)
---min-frames N          Minimum frames to extract (default: 3)
---max-frames N          Maximum frames to extract (default: 50)
 --model MODEL           AI model to use (llava, llava-large, blip2, instructblip) (default: llava)
 --language LANG         Tag language (default: en)
 --db PATH               SQLite database path

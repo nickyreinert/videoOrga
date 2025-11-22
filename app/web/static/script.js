@@ -230,6 +230,57 @@ function renderListView(paginatedVideos) {
     `;
 }
 
+function renderListViewGrouped(paginatedVideos) {
+    const grid = document.getElementById('video-grid');
+    grid.className = 'list-view';
+
+    const groupedByYear = groupVideosByYear(paginatedVideos);
+
+    grid.innerHTML = groupedByYear.map(group => {
+        return `
+            <div class="year-separator mb-3">
+                <h3 class="year-title">${group.year}</h3>
+                <hr class="year-divider">
+            </div>
+            <table class="table table-striped mb-5">
+                <thead>
+                    <tr>
+                        <th scope="col">Thumbnail</th>
+                        <th scope="col">Filename</th>
+                        <th scope="col">Creation Date</th>
+                        <th scope="col">Tags</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${group.videos.map(video => `
+                        <tr>
+                            <td>
+                                ${video.thumbnail_data && video.thumbnail_data.length > 0
+                ? `<img src="data:image/jpeg;base64,${video.thumbnail_data[0]}" 
+                                           alt="Thumbnail" style="width: 100px; height: auto;">`
+                : `<div style="width: 100px; height: 56px; background-color: #ccc;"></div>`
+            }
+                            </td>
+                            <td>${video.file_name}</td>
+                            <td>${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</td>
+                            <td>
+                                ${(video.tags || []).map(tag =>
+                `<span class="badge me-1 video-tag ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="toggleTag('${tag}')">${tag}</span>`
+            ).join('')}
+                            </td>
+                            <td>
+                                <button class="btn btn-primary btn-sm" onclick="openVideo(${video.id})">Open</button>
+                                <button class="btn btn-secondary btn-sm" onclick='openVideoDetailModal(${video.id})'>Details</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }).join('');
+}
+
 function renderGridView(paginatedVideos, viewType = 'grid') {
     const grid = document.getElementById('video-grid');
     const colClass = viewType === 'compact' ? 'col-6 col-md-4 col-lg-2' : 'col-12 col-md-6 col-lg-4';
@@ -259,6 +310,52 @@ function renderGridView(paginatedVideos, viewType = 'grid') {
                 </div>
             </div>
         </div>`;
+    }).join('');
+}
+
+function renderGridViewGrouped(paginatedVideos, viewType = 'grid') {
+    const grid = document.getElementById('video-grid');
+    const colClass = viewType === 'compact' ? 'col-6 col-md-4 col-lg-2' : 'col-12 col-md-6 col-lg-4';
+    grid.className = `row g-4 ${viewType}-view`;
+
+    const groupedByYear = groupVideosByYear(paginatedVideos);
+
+    grid.innerHTML = groupedByYear.map(group => {
+        const yearVideos = group.videos.map(video => {
+            const thumbnails = video.thumbnail_data || [];
+            const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
+
+            return `
+            <div class="video-item ${colClass}">
+                <div class="card h-100">
+                    ${firstThumbnail
+                    ? `<img src="data:image/jpeg;base64,${firstThumbnail}" class="card-img-top" alt="Thumbnail" data-thumbnails='${JSON.stringify(thumbnails)}' onmouseenter="startThumbnailCycle(this)" onmouseleave="stopThumbnailCycle(this)">`
+                    : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center" style="height: 150px;">No Thumbnail</div>`
+                }
+                    <div class="card-body" onclick='openVideoDetailModal(${video.id})'>
+                        <h5 class="card-title text-truncate" title="${video.file_name}">${video.file_name}</h5>
+                        <p class="card-text"><small class="text-muted">${new Date(video.parsed_datetime || video.file_created_date).toLocaleDateString()}</small></p>
+                        <div class="tags-compact mb-2">
+                            ${(video.tags || []).map(tag => `<span class="badge me-1 ${selectedTags.includes(tag) ? 'bg-success' : 'bg-primary'}" onclick="event.stopPropagation(); toggleTag('${tag}');">${tag}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-primary btn-sm" onclick="openVideo(${video.id})">Play</button>
+                        <button class="btn btn-secondary btn-sm" onclick="openVideoDetailModal(${video.id})">Edit</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+        return `
+            <div class="col-12">
+                <div class="year-separator">
+                    <h3 class="year-title">${group.year}</h3>
+                    <hr class="year-divider">
+                </div>
+            </div>
+            ${yearVideos}
+        `;
     }).join('');
 }
 
@@ -292,6 +389,50 @@ function renderSuperCompactView(paginatedVideos) {
     }).join('');
 }
 
+function renderSuperCompactViewGrouped(paginatedVideos) {
+    const grid = document.getElementById('video-grid');
+    grid.className = 'row g-2 super-compact-view';
+
+    const groupedByYear = groupVideosByYear(paginatedVideos);
+
+    grid.innerHTML = groupedByYear.map(group => {
+        const yearVideos = group.videos.map(video => {
+            const thumbnails = video.thumbnail_data || [];
+            const firstThumbnail = thumbnails.length > 0 ? thumbnails[0] : '';
+
+            return `
+            <div class="video-item col-6 col-sm-4 col-md-3 col-lg-2">
+                <div class="card h-100 border-0 shadow-sm" style="cursor: pointer;" onclick='openVideoDetailModal(${video.id})'>
+                    ${firstThumbnail
+                    ? `<img src="data:image/jpeg;base64,${firstThumbnail}" 
+                               class="card-img-top rounded" 
+                               alt="${video.file_name}" 
+                               title="${video.file_name}" 
+                               data-thumbnails='${JSON.stringify(thumbnails)}' 
+                               onmouseenter="startThumbnailCycle(this)" 
+                               onmouseleave="stopThumbnailCycle(this)" 
+                               style="aspect-ratio: 16/9; object-fit: cover;">`
+                    : `<div class="card-img-top bg-secondary text-white d-flex align-items-center justify-content-center rounded" 
+                                style="aspect-ratio: 16/9;">
+                                <i class="fas fa-video fa-2x"></i>
+                           </div>`
+                }
+                </div>
+            </div>`;
+        }).join('');
+
+        return `
+            <div class="col-12">
+                <div class="year-separator">
+                    <h3 class="year-title">${group.year}</h3>
+                    <hr class="year-divider">
+                </div>
+            </div>
+            ${yearVideos}
+        `;
+    }).join('');
+}
+
 function sortVideos(key) {
     if (sortState.key === key) {
         sortState.order = sortState.order === 'asc' ? 'desc' : 'asc';
@@ -321,14 +462,32 @@ function renderPage(viewType = null) {
     const paginatedVideos = videos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     if (selectedView === 'list') {
-        renderListView(paginatedVideos);
+        renderListViewGrouped(paginatedVideos);
     } else if (selectedView === 'super-compact') {
-        renderSuperCompactView(paginatedVideos);
+        renderSuperCompactViewGrouped(paginatedVideos);
     } else {
         // 'grid' or 'compact'
-        renderGridView(paginatedVideos, selectedView);
+        renderGridViewGrouped(paginatedVideos, selectedView);
     }
     renderPagination(itemsPerPage);
+}
+
+// Helper function to group videos by year
+function groupVideosByYear(videos) {
+    const grouped = {};
+    videos.forEach(video => {
+        const date = new Date(video.parsed_datetime || video.file_created_date);
+        const year = date.getFullYear();
+        if (!grouped[year]) {
+            grouped[year] = [];
+        }
+        grouped[year].push(video);
+    });
+    // Sort years in descending order
+    return Object.keys(grouped).sort((a, b) => b - a).map(year => ({
+        year: year,
+        videos: grouped[year]
+    }));
 }
 
 // Render pagination controls

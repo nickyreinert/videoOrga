@@ -5,7 +5,7 @@ Automatically analyze and tag your video collection using local AI models runnin
 ## Features
 
 - 🎬 Extract representative frames from videos
-- 🤖 Analyze frames using local AI (BLIP, BLIP-2, or CLIP)
+- 🤖 Analyze frames using local AI (Multimodal LLM)
 - 🏷️ Automatically generate descriptive tags
 - 🎤 Audio transcription with Whisper (optional)
 - 📝 AI text summarization (optional)
@@ -114,7 +114,7 @@ python video_tagger.py my_video.mp4
 
 **What happens:**
 1. Extracts 8 frames from the video
-2. Analyzes them with AI (BLIP model)
+2. Analyzes them with AI (Multimodal LLM)
 3. Generates descriptive tags
 4. Extracts 3 thumbnail previews
 5. Parses datetime from filename (if available)
@@ -156,26 +156,31 @@ python video_tagger.py . --search "people"
 
 ## AI Models
 
-### Video Analysis
+### Video Analysis (Multimodal LLM)
 
+The system now uses a **single multimodal LLM** for all tasks: frame analysis, captioning, summarization, and tagging. This provides higher quality and more consistent results compared to using separate models.
 
-#### BLIP (Default - Recommended)
+#### LLaVA 1.5 (Default - Recommended)
 - **Speed**: Fast ⚡
-- **VRAM**: ~3-4GB
-- **Quality**: Good descriptions
-- **Best for**: Most use cases
+- **VRAM**: ~4-6GB (4-bit quantized)
+- **Quality**: Excellent descriptions and summaries
+- **Best for**: General purpose video tagging
+- **Model**: `llava-hf/llava-1.5-7b-hf`
 
-#### BLIP-2
+#### LLaVA 1.5 Large
 - **Speed**: Slower
-- **VRAM**: ~6-7GB
-- **Quality**: More detailed descriptions
-- **Best for**: When you need detailed analysis
+- **VRAM**: ~8-10GB (4-bit quantized)
+- **Quality**: Superior detail and reasoning
+- **Best for**: Complex scenes requiring detailed analysis
+- **Model**: `llava-hf/llava-1.5-13b-hf`
 
-#### CLIP
-- **Speed**: Fastest ⚡⚡
-- **VRAM**: ~2-3GB
-- **Quality**: Category classification
-- **Best for**: Simple categorization, large batches
+#### BLIP-2 / InstructBLIP
+- **Speed**: Medium
+- **VRAM**: ~6-8GB
+- **Quality**: Good alternative if LLaVA doesn't suit your needs
+- **Best for**: Specific captioning styles
+
+**Note:** The system automatically attempts to load models with **4-bit quantization** to save VRAM. If that fails, it falls back to 8-bit or full precision.
 
 ### Audio Model Comparison
 
@@ -197,10 +202,14 @@ Whisper is OpenAI's open-source speech recognition model:
 - Runs locally on your GPU
 - No API calls or internet needed
 
-### AI Summary Models
+### Customizing the AI Prompt
 
-- I suggest using `mistralai/Mistral-7B-Instruct-v0.2`, smaller models like `google/flan-t5-base` are faster but cannot handle summary the summary and had trouble returning usable results
+You can customize how the AI summarizes and tags videos by editing the `summary_prompt.txt` file. This allows you to:
+- Change the target language instructions
+- Adjust the style of the summary
+- Focus on specific details
 
+The prompt file supports placeholders like `{language}`, `{visual_context}`, and `{audio_transcript}`.
 
 ## Database Schema
 
@@ -241,7 +250,7 @@ Example filename patterns recognized:
 ## Tips for Best Results
 
 1. **Frame Count**: Use 8-12 frames for short videos, 16+ for longer content
-2. **Model Selection**: Start with BLIP, upgrade to BLIP-2 if needed
+2. **Model Selection**: Start with LLaVA (default), upgrade to Large if needed
 3. **GPU Memory**: Close other GPU applications before processing
 4. **Video Quality**: Higher resolution videos produce better tags
 5. **Batch Processing**: Process videos overnight for large collections
@@ -296,9 +305,9 @@ Approximate processing times on RTX 3070:
 
 ### VRAM Usage
 
-- **Video analysis only**: ~3-4GB
-- **+ Audio (base)**: ~4-5GB
-- **+ Audio (small)**: ~5-6GB
+- **Video analysis only**: ~4-6GB
+- **+ Audio (base)**: ~5-7GB
+- **+ Audio (small)**: ~6-8GB
 
 ## Tips & Best Practices
 

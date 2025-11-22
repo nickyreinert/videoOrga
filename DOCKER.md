@@ -6,6 +6,11 @@
         source: /e/OneDrive/Projekte/Video
         target: /videos
         read_only: true
+      # Optional: Mount custom prompt file
+      # - type: bind
+      #   source: ./summary_prompt.txt
+      #   target: /app/summary_prompt.txt
+      #   read_only: true
 ```
 
 # Build the image

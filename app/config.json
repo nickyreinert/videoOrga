@@ -3,9 +3,6 @@
     "ai_summary": {
         "_description": "Settings for the consolidated AI summary feature.",
         "use_ai_summary": true,
-        "summary_llm_model_description": "Model used for generating summaries and tags. Must be a text generation model. Consider using mistralai/Mistral-7B-Instruct-v0.2 for better results, you can try googlke/flan-t5 models, but you need to adjust the prompt and the results may vary.",
-        "summary_llm_model": "mistralai/Mistral-7B-Instruct-v0.2",
-        "context_window_size": 1500,
         "prompt_file_description": "Path to a text file containing the prompt for summary and tag generation. Placeholders: {language}, {visual_context}, {audio_transcript}",
         "prompt_file": "summary_prompt.txt"
     },
@@ -15,7 +12,7 @@
         "min_frames": 3,
         "max_frames": 50,
         "num_thumbnails": 5,
-        "model_name": "blip",
+        "model_name": "llava",
         "force_reprocess": true,
         "recursive_search": true
     },

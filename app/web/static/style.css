@@ -20,7 +20,7 @@ body {
 
 /* Left Sidebar - 10% width, fixed, scrollable */
 .left-sidebar {
-    width: 10%;
+    width: 20%;
     min-width: 180px;
     max-width: 250px;
     height: 100%;
@@ -60,8 +60,8 @@ body {
 
 /* Main Content Area - 85% width */
 .main-content {
-    width: 85%;
-    margin-left: 10%;
+    width: 75%;
+    margin-left: 15%;
     margin-right: 5%;
     height: 100%;
     overflow-y: auto;

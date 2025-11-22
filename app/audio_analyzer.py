@@ -334,7 +334,7 @@ class AudioAnalyzer:
                 print("\n[3/3] Generating summary...")
                 summary = self.summarize_text(transcription['text'])
             else:
-                print("\n[3/3] Skipping summary generation")
+                print("\n[3/3] Skipping summary generation in audio_analyzer")
             
             # Compile results
             word_count = len(transcription['text'].split())
